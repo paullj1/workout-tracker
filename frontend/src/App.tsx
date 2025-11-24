@@ -355,6 +355,7 @@ const App = () => {
         <div className="layout-stack">
           <GuidedWorkout
             templates={templatesQuery.data ?? []}
+            workouts={workoutsQuery.data ?? []}
             onSave={handleCreate}
             unitPreference={unitPreference}
             onTimerUpdate={handleTimerUpdate}

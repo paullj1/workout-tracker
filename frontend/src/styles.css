@@ -943,9 +943,44 @@ label {
 
 .set-row--inline {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(110px, 1fr)) auto;
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
   gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.set-row__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.set-row__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.set-row__field--action {
+  display: flex;
+  align-items: stretch;
+}
+
+.set-row__field--action button {
+  width: 100%;
+}
+
+.set-row--inline .set-row__title,
+.set-row--inline button {
+  align-self: center;
+}
+
+.set-row__action {
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  border-radius: 12px;
 }
 
 .set-row__title {

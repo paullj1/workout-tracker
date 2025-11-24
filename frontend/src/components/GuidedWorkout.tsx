@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Template, WorkoutPayload, WorkoutSet } from "../lib/api";
+import type { Template, Workout, WorkoutPayload, WorkoutSet } from "../lib/api";
 import { displayWeight, preferredWeightUnit, toKgFromPreference } from "../lib/units";
 import type { UnitSystem } from "../types/units";
 
@@ -10,6 +10,7 @@ type Slide =
 
 type Props = {
   templates: Template[];
+  workouts: Workout[];
   onSave: (payload: WorkoutPayload) => void;
   unitPreference: UnitSystem;
   userId?: string;
@@ -65,7 +66,15 @@ const clearPersistedState = (storageKey: string) => {
   window.localStorage.removeItem(storageKey);
 };
 
-const GuidedWorkout = ({ templates, onSave, unitPreference, userId, onTimerUpdate, onLiveContextChange }: Props) => {
+const GuidedWorkout = ({
+  templates,
+  workouts,
+  onSave,
+  unitPreference,
+  userId,
+  onTimerUpdate,
+  onLiveContextChange,
+}: Props) => {
   const preferredUnit = useMemo(() => preferredWeightUnit(unitPreference), [unitPreference]);
   const storageKey = useMemo(() => getStorageKey(userId), [userId]);
   const persisted = useMemo(() => loadPersistedState(storageKey), [storageKey]);
@@ -126,6 +135,40 @@ const GuidedWorkout = ({ templates, onSave, unitPreference, userId, onTimerUpdat
     () => loggedSets.filter((set) => (currentExercise ? set.exercise === currentExercise.name : false)),
     [loggedSets, currentExercise],
   );
+  const latestExerciseSets = useMemo(() => {
+    const sorted = [...workouts].sort(
+      (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime(),
+    );
+    const latest = new Map<string, WorkoutSet[]>();
+    sorted.forEach((workout) => {
+      const grouped = new Map<string, WorkoutSet[]>();
+      workout.sets.forEach((set) => {
+        const list = grouped.get(set.exercise) ?? [];
+        list.push(set);
+        grouped.set(set.exercise, list);
+      });
+      grouped.forEach((sets, exercise) => {
+        if (!latest.has(exercise)) {
+          latest.set(exercise, sets);
+        }
+      });
+    });
+    return latest;
+  }, [workouts]);
+  const lastSetSuggestion = useMemo(() => {
+    if (!currentExercise) return null;
+    const priorSets = latestExerciseSets.get(currentExercise.name);
+    if (!priorSets || priorSets.length === 0) return null;
+    const prior = priorSets[currentExerciseSets.length]; // current set index (0-based)
+    if (!prior) return null;
+    return {
+      reps: prior.reps,
+      weight:
+        prior.weight === null || prior.weight === undefined
+          ? null
+          : displayWeight(prior.weight, prior.unit, unitPreference),
+    };
+  }, [currentExercise, currentExerciseSets.length, latestExerciseSets, unitPreference]);
   const hasStarted = Boolean(startTime);
   const isActive = Boolean(startTime && !endTime);
   const hasPrev = activeSlide > 0;
@@ -587,27 +630,39 @@ const GuidedWorkout = ({ templates, onSave, unitPreference, userId, onTimerUpdat
                               }
                             }}
                           >
-                            <div className="set-row__title">
-                              <h3>Log this set</h3>
-                              <small>{hasStarted ? "Save every set as you go" : "Start the workout to log"}</small>
+                            <div className="set-row__field">
+                              <input
+                                type="number"
+                                min={0}
+                                value={setForm.reps}
+                                onChange={(event) => setSetForm({ ...setForm, reps: Number(event.target.value) })}
+                                placeholder="Reps"
+                                disabled={!activeTemplate || !isActive}
+                              />
+                              {lastSetSuggestion && (
+                                <div className="set-row__hint card__hint">Last: {lastSetSuggestion.reps} reps</div>
+                              )}
                             </div>
-                            <input
-                              type="number"
-                              min={0}
-                              value={setForm.reps}
-                              onChange={(event) => setSetForm({ ...setForm, reps: Number(event.target.value) })}
-                              placeholder="Reps"
+                            <div className="set-row__field">
+                              <input
+                                type="number"
+                                min={0}
+                                value={setForm.weight}
+                                onChange={(event) => setSetForm({ ...setForm, weight: event.target.value })}
+                                placeholder={`Weight (${preferredUnit})`}
+                                disabled={!activeTemplate || !isActive}
+                              />
+                              {lastSetSuggestion?.weight && (
+                                <div className="set-row__hint card__hint">Last: {lastSetSuggestion.weight}</div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              className="set-row__action"
+                              onClick={handleAddSet}
                               disabled={!activeTemplate || !isActive}
-                            />
-                            <input
-                              type="number"
-                              min={0}
-                              value={setForm.weight}
-                              onChange={(event) => setSetForm({ ...setForm, weight: event.target.value })}
-                              placeholder={`Weight (${preferredUnit})`}
-                              disabled={!activeTemplate || !isActive}
-                            />
-                            <button type="button" onClick={handleAddSet} disabled={!activeTemplate || !isActive}>
+                              aria-label="Save set"
+                            >
                               ⏎
                             </button>
                           </div>

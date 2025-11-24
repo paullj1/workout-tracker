@@ -31,7 +31,7 @@ const clearPersistedState = (storageKey) => {
         return;
     window.localStorage.removeItem(storageKey);
 };
-const GuidedWorkout = ({ templates, onSave, unitPreference, userId, onTimerUpdate, onLiveContextChange }) => {
+const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, onTimerUpdate, onLiveContextChange, }) => {
     const preferredUnit = useMemo(() => preferredWeightUnit(unitPreference), [unitPreference]);
     const storageKey = useMemo(() => getStorageKey(userId), [userId]);
     const persisted = useMemo(() => loadPersistedState(storageKey), [storageKey]);
@@ -77,6 +77,40 @@ const GuidedWorkout = ({ templates, onSave, unitPreference, userId, onTimerUpdat
     const currentExercise = exerciseSlides[currentExerciseIndex] ?? null;
     const nextExercise = exerciseSlides[currentExerciseIndex + 1] ?? null;
     const currentExerciseSets = useMemo(() => loggedSets.filter((set) => (currentExercise ? set.exercise === currentExercise.name : false)), [loggedSets, currentExercise]);
+    const latestExerciseSets = useMemo(() => {
+        const sorted = [...workouts].sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+        const latest = new Map();
+        sorted.forEach((workout) => {
+            const grouped = new Map();
+            workout.sets.forEach((set) => {
+                const list = grouped.get(set.exercise) ?? [];
+                list.push(set);
+                grouped.set(set.exercise, list);
+            });
+            grouped.forEach((sets, exercise) => {
+                if (!latest.has(exercise)) {
+                    latest.set(exercise, sets);
+                }
+            });
+        });
+        return latest;
+    }, [workouts]);
+    const lastSetSuggestion = useMemo(() => {
+        if (!currentExercise)
+            return null;
+        const priorSets = latestExerciseSets.get(currentExercise.name);
+        if (!priorSets || priorSets.length === 0)
+            return null;
+        const prior = priorSets[currentExerciseSets.length]; // current set index (0-based)
+        if (!prior)
+            return null;
+        return {
+            reps: prior.reps,
+            weight: prior.weight === null || prior.weight === undefined
+                ? null
+                : displayWeight(prior.weight, prior.unit, unitPreference),
+        };
+    }, [currentExercise, currentExerciseSets.length, latestExerciseSets, unitPreference]);
     const hasStarted = Boolean(startTime);
     const isActive = Boolean(startTime && !endTime);
     const hasPrev = activeSlide > 0;
@@ -386,7 +420,7 @@ const GuidedWorkout = ({ templates, onSave, unitPreference, userId, onTimerUpdat
                                                                         event.preventDefault();
                                                                         handleAddSet();
                                                                     }
-                                                                }, children: [_jsxs("div", { className: "set-row__title", children: [_jsx("h3", { children: "Log this set" }), _jsx("small", { children: hasStarted ? "Save every set as you go" : "Start the workout to log" })] }), _jsx("input", { type: "number", min: 0, value: setForm.reps, onChange: (event) => setSetForm({ ...setForm, reps: Number(event.target.value) }), placeholder: "Reps", disabled: !activeTemplate || !isActive }), _jsx("input", { type: "number", min: 0, value: setForm.weight, onChange: (event) => setSetForm({ ...setForm, weight: event.target.value }), placeholder: `Weight (${preferredUnit})`, disabled: !activeTemplate || !isActive }), _jsx("button", { type: "button", onClick: handleAddSet, disabled: !activeTemplate || !isActive, children: "\u23CE" })] })] })] })), _jsxs("div", { className: "guided-wizard__nav", children: [_jsx("button", { type: "button", className: "ghost", onClick: handlePrev, disabled: !hasPrev, children: "\u2190 Back" }), _jsx("div", { className: "guided-wizard__nav-status" }), _jsxs("button", { type: "button", onClick: handleNext, disabled: !hasNext, children: [wrapNextLabel, " \u2192"] })] })] }, slide.key));
+                                                                }, children: [_jsxs("div", { className: "set-row__field", children: [_jsx("input", { type: "number", min: 0, value: setForm.reps, onChange: (event) => setSetForm({ ...setForm, reps: Number(event.target.value) }), placeholder: "Reps", disabled: !activeTemplate || !isActive }), lastSetSuggestion && (_jsxs("div", { className: "set-row__hint card__hint", children: ["Last: ", lastSetSuggestion.reps, " reps"] }))] }), _jsxs("div", { className: "set-row__field", children: [_jsx("input", { type: "number", min: 0, value: setForm.weight, onChange: (event) => setSetForm({ ...setForm, weight: event.target.value }), placeholder: `Weight (${preferredUnit})`, disabled: !activeTemplate || !isActive }), lastSetSuggestion?.weight && (_jsxs("div", { className: "set-row__hint card__hint", children: ["Last: ", lastSetSuggestion.weight] }))] }), _jsx("div", { className: "set-row__field set-row__field--action", children: _jsx("button", { type: "button", className: "set-row__action", onClick: handleAddSet, disabled: !activeTemplate || !isActive, "aria-label": "Save set", children: "\u23CE" }) })] })] })] })), _jsxs("div", { className: "guided-wizard__nav", children: [_jsx("button", { type: "button", className: "ghost", onClick: handlePrev, disabled: !hasPrev, children: "\u2190 Back" }), _jsx("div", { className: "guided-wizard__nav-status" }), _jsxs("button", { type: "button", onClick: handleNext, disabled: !hasNext, children: [wrapNextLabel, " \u2192"] })] })] }, slide.key));
                                 }
                                 if (slide.type === "finish") {
                                     return (_jsxs("section", { className: "guided-wizard__slide", children: [_jsx("div", { className: "section-heading", children: _jsxs("div", { children: [_jsxs("p", { className: "exercise-card__eyebrow", children: ["Step ", slides.length] }), _jsx("h3", { children: "Wrap up" }), _jsx("p", { className: "card__hint", children: "Capture notes and body weight before saving." })] }) }), _jsxs("div", { className: "guided-summary", children: [_jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Elapsed" }), _jsx("strong", { children: formatClock(startTime ? elapsedMs : null) })] }), _jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Sets logged" }), _jsx("strong", { children: loggedSets.length })] }), _jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Template" }), _jsx("strong", { children: activeTemplate?.name ?? "—" })] })] }), _jsxs("div", { className: "form-grid", children: [_jsxs("label", { children: ["Session notes", _jsx("textarea", { rows: 3, value: notes, onChange: (event) => setNotes(event.target.value), placeholder: "Energy, PRs, anything worth remembering." })] }), _jsxs("label", { children: ["Body weight (", preferredUnit, ")", _jsx("input", { type: "number", min: 0, value: bodyWeight, onChange: (event) => setBodyWeight(event.target.value) })] })] }), _jsxs("div", { className: "guided-wizard__nav", children: [_jsx("button", { type: "button", className: "ghost", onClick: handlePrev, disabled: !hasPrev, children: "\u2190 Back" }), _jsx("div", { className: "guided-wizard__nav-status", children: _jsxs("small", { children: ["Slide ", activeSlide + 1, " of ", slides.length] }) }), _jsx("button", { type: "button", className: "ghost ghost--danger ghost--small", onClick: handleAbort, disabled: !canAbort, children: "\uD83D\uDED1 Abort" })] }), _jsx("button", { type: "button", className: `finish-button${isRestExpired ? " finish-button--alert" : ""}`, onClick: handleFinish, disabled: !startTime || Boolean(endTime), children: "\uD83C\uDFC1 Finish" })] }, slide.key));
