@@ -21,4 +21,4 @@ ensure_frontend_bundle() {
 ensure_frontend_bundle
 
 cd "$ROOT"
-uv run workout-tracker-api "$@"
+uv run workout-tracker "$@"

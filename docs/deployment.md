@@ -8,12 +8,12 @@ This document outlines how to deploy the Workout Tracker with Postgres and conta
 - Build frontend bundle: `cd frontend && npm run build`.
 - Package a wheel (frontend bundle is included via `tool.hatch.build.force-include`): `uv run hatch build`.
 - Install the wheel on the target environment: `uv pip install dist/workout_tracker-*.whl`.
-- Run the API: `workout-tracker-api` (via `./scripts/api.sh`).
+- Run the API: `workout-tracker` (via `./scripts/api.sh`).
 
 ### Container image
 - Use `deploy/docker/Dockerfile` to build a production image.
 - `docker build -f deploy/docker/Dockerfile -t workout-tracker .`
-- The Dockerfile builds the SPA in a Node stage, packages the Python wheel (which already contains the compiled frontend), and installs the wheel into a slim uv runtime image. No helper scripts are copied—runtime executes `workout-tracker-api`.
+- The Dockerfile builds the SPA in a Node stage, packages the Python wheel (which already contains the compiled frontend), and installs the wheel into a slim uv runtime image. No helper scripts are copied—runtime executes `workout-tracker`.
 
 ## 2. Environment configuration
 
@@ -29,7 +29,7 @@ This document outlines how to deploy the Workout Tracker with Postgres and conta
 
 You can override these at runtime with CLI flags instead of editing environment files. Example:
 ```
-workout-tracker-api \
+workout-tracker \
   --database-url postgresql+psycopg://workout:workout@db:5432/workout \
   --auth-rp-id workout.example.com \
   --auth-origin https://workout.example.com \
@@ -42,7 +42,7 @@ For a lightweight deployment that sticks with SQLite, bind-mount a volume and po
 docker run --rm \
   -v /host/data/workout:/data \
   -p 8000:8000 workout-tracker:latest \
-  workout-tracker-api --database-url sqlite:////data/workout.sqlite3 --host 0.0.0.0
+  workout-tracker --database-url sqlite:////data/workout.sqlite3 --host 0.0.0.0
 ```
 The four leading slashes in `sqlite:////data/workout.sqlite3` indicate an absolute path.
 

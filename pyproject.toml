@@ -33,7 +33,7 @@ dev = [
 ]
 
 [project.scripts]
-workout-tracker-api = "workout_tracker.cli:main"
+workout-tracker = "workout_tracker.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.25"]

@@ -25,4 +25,4 @@ COPY --from=wheel-build /app/dist /tmp/dist
 RUN uv tool install /tmp/dist/*.whl && rm -rf /tmp/dist
 
 EXPOSE 8000
-CMD ["workout-tracker-api"]
+CMD ["workout-tracker"]

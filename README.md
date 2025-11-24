@@ -28,7 +28,7 @@ This repository contains a small, privacy‑focused workout tracker composed of:
 
 ## Tooling
 
-- **uv** handles dependency resolution (`uv pip sync pyproject.toml`) and virtual environments (`uv venv`).
+- **uv** handles dependency resolution (`uv sync`) and virtual environments (`uv venv`).
 - **hatchling** builds the final wheel with both backend code and compiled frontend assets.
 - **Vite** powers the React development server and build pipeline.
 - **GitHub Actions** run `uv run --extra dev pytest` for the backend and `npm run typecheck && npm run build` for the frontend on every push/pull request (`.github/workflows/ci.yml`).
@@ -36,24 +36,20 @@ This repository contains a small, privacy‑focused workout tracker composed of:
 ## Getting started
 
 1. **Install Python 3.11+** and [uv](https://docs.astral.sh/uv/).
-2. **Create a virtual environment**:
-   ```bash
-   uv venv
-   source .venv/bin/activate
    ```
-3. **Install backend dependencies**:
+2. **Install backend dependencies**:
    ```bash
-   uv pip sync pyproject.toml
+   uv sync
    ```
-4. **Install frontend dependencies**:
+3. **Install frontend dependencies**:
    ```bash
    cd frontend
    npm install
    npm run dev
    ```
-5. **Run the API** (from repo root):
+4. **Run the API** (from repo root):
    ```bash
-   ./scripts/api.sh
+   uv run workout-tracker
    ```
 
 The helper script installs/builds the React app (if needed) and boots the API on `http://127.0.0.1:8000`, so the SPA and API share a single origin. Set `SKIP_FRONTEND_BUILD=1 ./scripts/api.sh` if you want to skip the build step and use a precompiled bundle.
@@ -69,7 +65,7 @@ The FastAPI process automatically serves assets from `frontend/dist` during deve
 2. Copy the static bundle into the Python package (handled automatically by Hatch via `tool.hatch.build.force-include`).
 3. Build the wheel:
    ```bash
-   uv run hatch build
+   uv build --wheel
    ```
 4. Install the wheel on the target host with `uv pip install dist/workout_tracker-*.whl`.
 
@@ -90,10 +86,10 @@ The Vite app consumes `VITE_API_URL` (defaults to same origin) when you need to 
 
 ### Command-line overrides
 
-In addition to environment variables, the `workout-tracker-api` console script exposes argparse flags so you can override configuration without editing `.env` files. Flags take precedence over env vars and are useful for one-off runs or container entrypoints:
+In addition to environment variables, the `workout-tracker` console script exposes argparse flags so you can override configuration without editing `.env` files. Flags take precedence over env vars and are useful for one-off runs or container entrypoints:
 
 ```bash
-workout-tracker-api \
+workout-tracker \
   --database-url postgresql+psycopg://user:pass@db/workout \
   --auth-rp-id workout.example.com \
   --auth-origin https://workout.example.com \
@@ -104,7 +100,7 @@ workout-tracker-api \
   --port 8000
 ```
 
-Run `workout-tracker-api --help` to see the full list of flags and defaults. CLI flags are mirrored in the `.env` keys above so you can mix and match as needed.
+Run `workout-tracker --help` to see the full list of flags and defaults. CLI flags are mirrored in the `.env` keys above so you can mix and match as needed.
 
 To deploy with SQLite on a bind-mounted volume, point `DATABASE_URL` at the mounted path, e.g.:
 
@@ -112,7 +108,7 @@ To deploy with SQLite on a bind-mounted volume, point `DATABASE_URL` at the moun
 docker run --rm \
   -v /host/data/workout:/data \
   -p 8000:8000 workout-tracker:latest \
-  workout-tracker-api --database-url sqlite:////data/workout.sqlite3 --host 0.0.0.0
+  workout-tracker --database-url sqlite:////data/workout.sqlite3 --host 0.0.0.0
 ```
 
 The four leading slashes in `sqlite:////data/workout.sqlite3` are required for an absolute path.
