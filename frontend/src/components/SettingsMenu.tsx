@@ -53,7 +53,6 @@ const SettingsMenu = ({
         <span className="settings__icon" aria-hidden="true">
           ⚙️
         </span>
-        <span className="settings__label">Settings</span>
       </button>
 
       {open && (

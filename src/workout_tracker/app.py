@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .database import adapter
-from .routers import users, workouts
+from .routers import templates, users, workouts
 from .auth import router as auth_router
 
 
@@ -54,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router)
     app.include_router(users.router)
     app.include_router(workouts.router)
+    app.include_router(templates.router)
 
     @app.on_event("startup")
     def _startup() -> None:

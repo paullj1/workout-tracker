@@ -33,6 +33,7 @@ class User(Base):
     passkey_user_handle: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
     workouts: Mapped[list["Workout"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    templates: Mapped[list["WorkoutTemplate"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     credentials: Mapped[list["PasskeyCredential"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -51,6 +52,20 @@ class Workout(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="workouts")
+
+
+class WorkoutTemplate(Base):
+    __tablename__ = "workout_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    encrypted_payload: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    user: Mapped["User"] = relationship(back_populates="templates")
 
 
 class PasskeyCredential(Base):

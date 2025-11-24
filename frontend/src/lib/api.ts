@@ -22,6 +22,7 @@ export type WorkoutPayload = {
   title: string;
   start_time: string;
   end_time?: string | null;
+  template_id?: string | null;
   body_weight?: number | null;
   body_weight_timing?: "before" | "after" | null;
   notes?: string | null;
@@ -62,6 +63,27 @@ export type AppleAuthPayload = {
   display_name?: string;
 };
 
+export type TemplateExercise = {
+  name: string;
+  target_sets: number;
+  target_reps: number;
+  rest_seconds?: number;
+};
+
+export type TemplatePayload = {
+  name: string;
+  notes?: string | null;
+  exercises: TemplateExercise[];
+};
+
+export type Template = TemplatePayload & {
+  id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TemplateUpdate = TemplatePayload & { id: string };
+
 export const fetchSession = async (): Promise<User | null> => {
   const { data } = await api.get<User | null>("/auth/session");
   return data;
@@ -98,3 +120,21 @@ export const fetchTrends = async (): Promise<TrendPoint[]> => {
   const { data } = await api.get<TrendPoint[]>("/workouts/trends/body");
   return data;
 };
+
+export const listTemplates = async (): Promise<Template[]> => {
+  const { data } = await api.get<Template[]>("/templates");
+  return data;
+};
+
+export const createTemplate = async (payload: TemplatePayload) => {
+  const { data } = await api.post<Template>("/templates", payload);
+  return data;
+};
+
+export const updateTemplate = async (payload: TemplateUpdate) => {
+  const { id, ...rest } = payload;
+  const { data } = await api.put<Template>(`/templates/${id}`, rest);
+  return data;
+};
+
+export const deleteTemplate = async (id: string) => api.delete(`/templates/${id}`);

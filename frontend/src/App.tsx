@@ -1,12 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { fetchSession, listWorkouts, createWorkout, deleteWorkout, fetchTrends, type WorkoutPayload } from "./lib/api";
+import {
+  fetchSession,
+  listWorkouts,
+  createWorkout,
+  deleteWorkout,
+  fetchTrends,
+  type WorkoutPayload,
+  listTemplates,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+} from "./lib/api";
 import { loginWithPasskey, logout, registerPasskey } from "./lib/passkeys";
-import WorkoutForm from "./components/WorkoutForm";
 import WorkoutList from "./components/WorkoutList";
 import TrendChart from "./components/TrendChart";
 import AppleSignInButton from "./components/AppleSignInButton";
 import SettingsMenu from "./components/SettingsMenu";
+import GuidedWorkout from "./components/GuidedWorkout";
+import TemplateBuilder from "./components/TemplateBuilder";
 import type { Theme, ThemePreference } from "./types/theme";
 import type { UnitSystem } from "./types/units";
 
@@ -39,6 +51,24 @@ const applyTheme = (preference: ThemePreference, systemTheme: Theme) => {
   window.localStorage.setItem(THEME_STORAGE_KEY, preference);
 };
 
+type LiveWorkoutContext = {
+  isActive: boolean;
+  exerciseName: string | null;
+  setNumber: number | null;
+  totalSets: number | null;
+  restMs: number | null;
+};
+
+const formatClock = (ms: number | null) => {
+  if (ms === null) return "--:--";
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+};
+
 const App = () => {
   const queryClient = useQueryClient();
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => getStoredPreference());
@@ -50,6 +80,15 @@ const App = () => {
   const [registerMessage, setRegisterMessage] = useState<string | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
+  const [activeTimer, setActiveTimer] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"workout" | "templates" | "trends">("workout");
+  const [liveWorkoutContext, setLiveWorkoutContext] = useState<LiveWorkoutContext>({
+    isActive: false,
+    exerciseName: null,
+    setNumber: null,
+    totalSets: null,
+    restMs: null,
+  });
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -88,6 +127,12 @@ const App = () => {
     enabled: Boolean(sessionQuery.data),
   });
 
+  const templatesQuery = useQuery({
+    queryKey: ["templates"],
+    queryFn: listTemplates,
+    enabled: Boolean(sessionQuery.data),
+  });
+
   const trendsQuery = useQuery({
     queryKey: ["trends"],
     queryFn: fetchTrends,
@@ -100,11 +145,29 @@ const App = () => {
       queryClient.invalidateQueries({ queryKey: ["workouts"] });
       queryClient.invalidateQueries({ queryKey: ["trends"] });
     },
+    onError: () => setError("Saving workout failed. Please try again."),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteWorkout(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workouts"] }),
+  });
+
+  const templateCreateMutation = useMutation({
+    mutationFn: createTemplate,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["templates"] }),
+    onError: () => setError("Saving template failed. Please try again."),
+  });
+
+  const templateUpdateMutation = useMutation({
+    mutationFn: updateTemplate,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["templates"] }),
+    onError: () => setError("Updating template failed. Please try again."),
+  });
+
+  const templateDeleteMutation = useMutation({
+    mutationFn: (id: string) => deleteTemplate(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["templates"] }),
   });
 
   const handleCreate = (payload: WorkoutPayload) => {
@@ -113,6 +176,19 @@ const App = () => {
   };
 
   const handleDelete = (id: string) => deleteMutation.mutate(id);
+  const handleTimerUpdate = (elapsedMs: number | null) => {
+    if (elapsedMs === null) {
+      setActiveTimer(null);
+      return;
+    }
+    const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const pad = (value: number) => value.toString().padStart(2, "0");
+    const label = hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+    setActiveTimer(label);
+  };
 
   if (sessionQuery.isLoading) {
     return <p style={{ padding: "2rem" }}>Loading...</p>;
@@ -209,55 +285,132 @@ const App = () => {
             🏋️‍♂️
           </span>
           <div>
-            <p className="brand__eyebrow">Workout Tracker</p>
-            <h1 className="brand__title">Welcome back, {user.display_name || "Athlete"}</h1>
+            <p className="brand__eyebrow">{liveWorkoutContext.isActive ? "Workout live" : "Workout Tracker"}</p>
+            <h1 className="brand__title">
+              {liveWorkoutContext.isActive ? liveWorkoutContext.exerciseName ?? "In session" : "Log. Improve. Repeat."}
+            </h1>
+            {liveWorkoutContext.isActive && (
+              <small className="brand__sub">
+                Set {liveWorkoutContext.setNumber ?? 1}
+                {liveWorkoutContext.totalSets ? ` of ${liveWorkoutContext.totalSets}` : ""}
+              </small>
+            )}
           </div>
         </div>
-        <SettingsMenu
-          userName={user.display_name}
-          preference={themePreference}
-          resolvedTheme={themePreference === "system" ? systemTheme : themePreference}
-          onThemeChange={setThemePreference}
-          unitPreference={unitPreference}
-          onUnitChange={setUnitPreference}
-          onSignOut={() =>
-            logout().then(() => {
-              sessionQuery.refetch();
-            })
-          }
-        />
+        <div className="top-bar__controls">
+          {liveWorkoutContext.isActive && (
+            <div className="top-bar__live">
+              <div className="top-bar__timer">
+                <p>Rest timer</p>
+                <strong>{formatClock(liveWorkoutContext.restMs)}</strong>
+              </div>
+              {activeTimer && (
+                <div className="top-bar__timer">
+                  <p>Workout</p>
+                  <strong>{activeTimer}</strong>
+                </div>
+              )}
+            </div>
+          )}
+          <SettingsMenu
+            userName={user.display_name}
+            preference={themePreference}
+            resolvedTheme={themePreference === "system" ? systemTheme : themePreference}
+            onThemeChange={setThemePreference}
+            unitPreference={unitPreference}
+            onUnitChange={setUnitPreference}
+            onSignOut={() =>
+              logout().then(() => {
+                sessionQuery.refetch();
+              })
+            }
+          />
+        </div>
       </header>
 
       {error && <small style={{ color: "var(--danger)" }}>{error}</small>}
 
-      <section className="hero card">
-        <div>
-          <p className="hero__eyebrow">Synced &amp; ready</p>
-          <h2>Track every session with confidence.</h2>
-          <p className="hero__copy">Log sets, spot trends, and keep your workouts tied to you with passkey sign-in.</p>
-          <div className="hero__pills">
-            <span className="pill" aria-label="Workouts logged">
-              📓 {workoutsQuery.data?.length ?? 0} logged
-            </span>
-            <span className="pill" aria-label="Theme in use">
-              {themePreference === "dark" ? "🌙" : themePreference === "light" ? "🌞" : "🖥️"} {themePreference} mode
-            </span>
-            <span className="pill" aria-label="Units preference">
-              ⚖️ {unitPreference === "metric" ? "Metric (kg)" : "Imperial (lb)"}
-            </span>
+      <div className="tabs">
+        <button
+          className={`tab ${activeTab === "workout" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("workout")}
+        >
+          🏃 Workout
+        </button>
+        <button
+          className={`tab ${activeTab === "templates" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("templates")}
+        >
+          🗂️ Templates
+        </button>
+        <button
+          className={`tab ${activeTab === "trends" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("trends")}
+        >
+          📈 Trends
+        </button>
+      </div>
+
+      {activeTab === "workout" && (
+        <div className="layout-stack">
+          <GuidedWorkout
+            templates={templatesQuery.data ?? []}
+            onSave={handleCreate}
+            unitPreference={unitPreference}
+            onTimerUpdate={handleTimerUpdate}
+            onLiveContextChange={setLiveWorkoutContext}
+            userId={user.id}
+          />
+        </div>
+      )}
+
+      {activeTab === "templates" && (
+        <div className="layout-stack">
+          <TemplateBuilder
+            templates={templatesQuery.data ?? []}
+            onCreate={(payload) => templateCreateMutation.mutate(payload)}
+            onUpdate={(payload) => templateUpdateMutation.mutate(payload)}
+            onDelete={(id) => templateDeleteMutation.mutate(id)}
+            isSubmitting={templateCreateMutation.isPending}
+            isUpdating={templateUpdateMutation.isPending}
+          />
+        </div>
+      )}
+
+      {activeTab === "trends" && (
+        <div className="layout-grid">
+          <section className="hero card">
+            <div>
+              <p className="hero__eyebrow">Templates + live timers</p>
+              <h2>Start from a plan, then beat it.</h2>
+              <p className="hero__copy">
+                Build reusable workout templates, start a guided session, and keep a running clock with auto rest
+                tracking.
+              </p>
+              <div className="hero__pills">
+                <span className="pill" aria-label="Workouts logged">
+                  📓 {workoutsQuery.data?.length ?? 0} logged
+                </span>
+                <span className="pill" aria-label="Templates saved">
+                  🗂️ {templatesQuery.data?.length ?? 0} templates
+                </span>
+                <span className="pill" aria-label="Theme in use">
+                  {themePreference === "dark" ? "🌙" : themePreference === "light" ? "🌞" : "🖥️"} {themePreference} mode
+                </span>
+                <span className="pill" aria-label="Units preference">
+                  ⚖️ {unitPreference === "metric" ? "Metric (kg)" : "Imperial (lb)"}
+                </span>
+              </div>
+            </div>
+          </section>
+          <div className="layout-stack">
+            <WorkoutList workouts={workoutsQuery.data ?? []} unitPreference={unitPreference} onDelete={handleDelete} />
+          </div>
+          <div className="layout-stack">
+            <TrendChart data={trendsQuery.data ?? []} unitPreference={unitPreference} />
           </div>
         </div>
-      </section>
-
-      <div className="layout-grid">
-        <div className="layout-stack">
-          <WorkoutForm onSubmit={handleCreate} unitPreference={unitPreference} />
-        </div>
-        <div className="layout-stack">
-          <WorkoutList workouts={workoutsQuery.data ?? []} unitPreference={unitPreference} onDelete={handleDelete} />
-          <TrendChart data={trendsQuery.data ?? []} unitPreference={unitPreference} />
-        </div>
-      </div>
+      )}
     </main>
   );
 };

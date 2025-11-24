@@ -9,6 +9,22 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
+const formatAggregatedSets = (workout: Workout, unitPreference: UnitSystem): string[] => {
+  const groups = new Map<string, string[]>();
+  workout.sets.forEach((set) => {
+    const weightLabel = displayWeight(set.weight, set.unit, unitPreference);
+    const entry = `${set.reps}x${weightLabel}`;
+    const list = groups.get(set.exercise) ?? [];
+    list.push(entry);
+    groups.set(set.exercise, list);
+  });
+  const lines: string[] = [];
+  groups.forEach((entries, exercise) => {
+    lines.push(`${exercise}: ${entries.join(", ")}`);
+  });
+  return lines;
+};
+
 const WorkoutList = ({ workouts, unitPreference, onDelete }: Props) => (
   <div className="card">
     <div className="card__header">
@@ -29,10 +45,10 @@ const WorkoutList = ({ workouts, unitPreference, onDelete }: Props) => (
             </button>
           </div>
           {workout.notes && <p className="workout-card__notes">{workout.notes}</p>}
-          <div className="chip-row">
-            {workout.sets.map((set, index) => (
-              <span key={`${workout.id}-set-${index}`} className="pill pill--muted">
-                💪 {set.exercise}: {set.reps} reps @ {displayWeight(set.weight, set.unit, unitPreference)}
+          <div className="chip-row chip-row--stacked">
+            {formatAggregatedSets(workout, unitPreference).map((line, index) => (
+              <span key={`${workout.id}-agg-${index}`} className="pill pill--muted">
+                💪 {line}
               </span>
             ))}
           </div>

@@ -36,3 +36,17 @@ export const fetchTrends = async () => {
     const { data } = await api.get("/workouts/trends/body");
     return data;
 };
+export const listTemplates = async () => {
+    const { data } = await api.get("/templates");
+    return data;
+};
+export const createTemplate = async (payload) => {
+    const { data } = await api.post("/templates", payload);
+    return data;
+};
+export const updateTemplate = async (payload) => {
+    const { id, ...rest } = payload;
+    const { data } = await api.put(`/templates/${id}`, rest);
+    return data;
+};
+export const deleteTemplate = async (id) => api.delete(`/templates/${id}`);
