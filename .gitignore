@@ -1,0 +1,12 @@
+.DS_Store
+__pycache__/
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+.venv/
+uv.lock
+frontend/node_modules/
+frontend/dist/
+*.sqlite3
