@@ -407,7 +407,7 @@ const App = () => {
             <WorkoutList workouts={workoutsQuery.data ?? []} unitPreference={unitPreference} onDelete={handleDelete} />
           </div>
           <div className="layout-stack">
-            <TrendChart data={trendsQuery.data ?? []} unitPreference={unitPreference} />
+            <TrendChart data={trendsQuery.data} unitPreference={unitPreference} />
           </div>
         </div>
       )}

@@ -25,6 +25,26 @@ This document outlines how to deploy the Workout Tracker with Postgres and conta
 ### Optional
 - `APPLE_TEAM_ID`, `APPLE_CLIENT_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`: Enables Sign in with Apple.
 - `VITE_APPLE_CLIENT_ID`: When running the SPA separately for development.
+- `CHALLENGE_TTL_SECONDS`: Passkey challenge validity window.
+
+You can override these at runtime with CLI flags instead of editing environment files. Example:
+```
+workout-tracker-api \
+  --database-url postgresql+psycopg://workout:workout@db:5432/workout \
+  --auth-rp-id workout.example.com \
+  --auth-origin https://workout.example.com \
+  --frontend-base-url https://workout.example.com \
+  --host 0.0.0.0 --port 8000
+```
+
+For a lightweight deployment that sticks with SQLite, bind-mount a volume and point the URL at the mounted path:
+```
+docker run --rm \
+  -v /host/data/workout:/data \
+  -p 8000:8000 workout-tracker:latest \
+  workout-tracker-api --database-url sqlite:////data/workout.sqlite3 --host 0.0.0.0
+```
+The four leading slashes in `sqlite:////data/workout.sqlite3` indicate an absolute path.
 
 ## 3. Database (Postgres)
 

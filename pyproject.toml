@@ -1,7 +1,3 @@
-[build-system]
-requires = ["hatchling>=1.25"]
-build-backend = "hatchling.build"
-
 [project]
 name = "workout-tracker"
 version = "0.1.0"
@@ -37,7 +33,11 @@ dev = [
 ]
 
 [project.scripts]
-workout-tracker-api = "workout_tracker.app:run"
+workout-tracker-api = "workout_tracker.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/workout_tracker"]

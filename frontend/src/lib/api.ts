@@ -35,12 +35,38 @@ export type Workout = WorkoutPayload & {
   updated_at: string;
 };
 
-export type TrendPoint = {
+export type TrendOverviewPoint = {
   date: string;
   total_sets: number;
   total_reps: number;
-  tonnage: number;
-  average_body_weight?: number | null;
+  tonnage_kg: number;
+  average_body_weight_kg?: number | null;
+  duration_minutes?: number | null;
+};
+
+export type TrendBodyWeightPoint = {
+  date: string;
+  average_body_weight_kg: number;
+};
+
+export type TrendDurationPoint = {
+  date: string;
+  duration_minutes: number;
+};
+
+export type TrendExercisePoint = {
+  date: string;
+  exercise: string;
+  tonnage_kg: number;
+  total_sets: number;
+  total_reps: number;
+};
+
+export type TrendsResponse = {
+  overview: TrendOverviewPoint[];
+  body_weight: TrendBodyWeightPoint[];
+  durations: TrendDurationPoint[];
+  exercise_volume: TrendExercisePoint[];
 };
 
 export type User = {
@@ -116,8 +142,8 @@ export const updateWorkout = async (payload: Workout) => {
 
 export const deleteWorkout = async (id: string) => api.delete(`/workouts/${id}`);
 
-export const fetchTrends = async (): Promise<TrendPoint[]> => {
-  const { data } = await api.get<TrendPoint[]>("/workouts/trends/body");
+export const fetchTrends = async (): Promise<TrendsResponse> => {
+  const { data } = await api.get<TrendsResponse>("/workouts/trends");
   return data;
 };
 

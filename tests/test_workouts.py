@@ -74,25 +74,43 @@ def test_workout_crud_and_trends(client: TestClient):
         assert stored is not None
         assert stored.encrypted_payload != json.dumps(updated).encode("utf-8")
 
-    trends = client.get("/workouts/trends/body", headers=_headers(encryption_token))
+    trends = client.get("/workouts/trends", headers=_headers(encryption_token))
     assert trends.status_code == 200
     points = trends.json()
-    assert points == [
-        {
-            "date": "2024-01-01T00:00:00",
-            "total_sets": 2,
-            "total_reps": 13,
-            "tonnage": 880.0,
-            "average_body_weight": 81.0,
-        },
-        {
-            "date": "2024-01-02T00:00:00",
-            "total_sets": 2,
-            "total_reps": 13,
-            "tonnage": 760.0,
-            "average_body_weight": 82.0,
-        },
-    ]
+    assert points == {
+        "overview": [
+            {
+                "date": "2024-01-01T00:00:00",
+                "total_sets": 2,
+                "total_reps": 13,
+                "tonnage_kg": 880.0,
+                "average_body_weight_kg": 81.0,
+                "duration_minutes": 60.0,
+            },
+            {
+                "date": "2024-01-02T00:00:00",
+                "total_sets": 2,
+                "total_reps": 13,
+                "tonnage_kg": 760.0,
+                "average_body_weight_kg": 82.0,
+                "duration_minutes": 60.0,
+            },
+        ],
+        "body_weight": [
+            {"date": "2024-01-01T00:00:00", "average_body_weight_kg": 81.0},
+            {"date": "2024-01-02T00:00:00", "average_body_weight_kg": 82.0},
+        ],
+        "durations": [
+            {"date": "2024-01-01T00:00:00", "duration_minutes": 60.0},
+            {"date": "2024-01-02T00:00:00", "duration_minutes": 60.0},
+        ],
+        "exercise_volume": [
+            {"date": "2024-01-01T00:00:00", "exercise": "Bench", "tonnage_kg": 400.0, "total_sets": 1, "total_reps": 5},
+            {"date": "2024-01-01T00:00:00", "exercise": "Row", "tonnage_kg": 480.0, "total_sets": 1, "total_reps": 8},
+            {"date": "2024-01-02T00:00:00", "exercise": "Lunge", "tonnage_kg": 400.0, "total_sets": 1, "total_reps": 10},
+            {"date": "2024-01-02T00:00:00", "exercise": "Squat", "tonnage_kg": 360.0, "total_sets": 1, "total_reps": 3},
+        ],
+    }
 
     delete_resp = client.delete(f"/workouts/{workout_one_id}")
     assert delete_resp.status_code == 204

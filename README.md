@@ -4,13 +4,13 @@ This repository contains a small, privacy‑focused workout tracker composed of:
 
 - A FastAPI backend that exposes workout, trend, and authentication endpoints.
 - A React + Vite frontend that talks to the API and is packaged inside the Python wheel.
-- A thin crypto layer that encrypts every workout payload with keys derived from a user‑controlled secret so the raw database is meaningless without a passkey/iCloud credential.
+- A thin crypto layer that encrypts every workout payload with keys derived from a user‑controlled secret so the raw database is meaningless without a passkey-derived secret.
 
 ## Features
 
-- Passkey (WebAuthn) first authentication with optional Sign in with Apple fallback.
-- Self‑service registration, account deletion, and encryption key rotation.
-- Secure storage of workouts (start/end time, body weight, notes, sets) via per‑user envelope encryption.
+- Passkey (WebAuthn) authentication for every account.
+- Self-service registration, account deletion, and encryption key rotation.
+- Secure storage of workouts (start/end time, body weight, notes, sets) via per-user envelope encryption.
 - Trend visualizations (volume, body weight, workout frequency) rendered client side.
 - Adapter friendly database layer that defaults to SQLite but can be pointed at Postgres.
 
@@ -51,7 +51,6 @@ This repository contains a small, privacy‑focused workout tracker composed of:
    npm install
    npm run dev
    ```
-   - Set `VITE_APPLE_CLIENT_ID` in `frontend/.env` if you plan to enable Sign in with Apple (matches your Services ID).
 5. **Run the API** (from repo root):
    ```bash
    ./scripts/api.sh
@@ -80,22 +79,43 @@ Environment variables (or `.env`) drive deployment:
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `DATABASE_URL` | SQLAlchemy connection URL | `sqlite:///./var/workout.sqlite3` |
+| `DATABASE_URL` | SQLAlchemy connection URL | `sqlite:///./workout.sqlite3` (resolved from current working directory) |
 | `AUTH_RP_ID` | Passkey relying party id (domain) | `localhost` |
 | `AUTH_ORIGIN` | Expected frontend origin for WebAuthn | `http://localhost:5173` |
 | `FRONTEND_BASE_URL` | Public URL used by emails/deep links | `http://localhost:8000` |
-| `APPLE_TEAM_ID`, `APPLE_CLIENT_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | Required to generate Apple client secrets and verify identity tokens | unset |
+| `SESSION_SECRET` | Secret used to sign sessions | `dev-change-me` |
+| `CHALLENGE_TTL_SECONDS` | Passkey challenge validity window | `300` |
 
 The Vite app consumes `VITE_API_URL` (defaults to same origin) when you need to point the SPA at a remote API during development.
 
-### Apple Sign-In
+### Command-line overrides
 
-To offer Sign in with Apple you must provide:
+In addition to environment variables, the `workout-tracker-api` console script exposes argparse flags so you can override configuration without editing `.env` files. Flags take precedence over env vars and are useful for one-off runs or container entrypoints:
 
-- Backend: `APPLE_TEAM_ID`, `APPLE_CLIENT_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (`.p8` contents). The API exchanges authorization codes for tokens and verifies identity claims using these values.
-- Frontend: `VITE_APPLE_CLIENT_ID` that matches the Services ID registered with Apple.
+```bash
+workout-tracker-api \
+  --database-url postgresql+psycopg://user:pass@db/workout \
+  --auth-rp-id workout.example.com \
+  --auth-origin https://workout.example.com \
+  --frontend-base-url https://workout.example.com \
+  --session-secret "$(openssl rand -hex 32)" \
+  --challenge-ttl-seconds 600 \
+  --host 0.0.0.0 \
+  --port 8000
+```
 
-Once configured, the login screen renders a "Continue with Apple" button. New users must supply an encryption token (stored client side) so their data remains unreadable without their credentials.
+Run `workout-tracker-api --help` to see the full list of flags and defaults. CLI flags are mirrored in the `.env` keys above so you can mix and match as needed.
+
+To deploy with SQLite on a bind-mounted volume, point `DATABASE_URL` at the mounted path, e.g.:
+
+```bash
+docker run --rm \
+  -v /host/data/workout:/data \
+  -p 8000:8000 workout-tracker:latest \
+  workout-tracker-api --database-url sqlite:////data/workout.sqlite3 --host 0.0.0.0
+```
+
+The four leading slashes in `sqlite:////data/workout.sqlite3` are required for an absolute path.
 
 ## Database adapters
 
@@ -110,12 +130,11 @@ Because the ORM layer never relies on SQLite‑specific features, switching data
 
 - Each user owns a randomly generated 32‑byte data key encrypted (PBKDF2 + Fernet) with a secret derived from their WebAuthn credential. The server never stores the raw key.
 - Workout payloads (metadata, notes, reps/sets) are serialized as JSON and encrypted before persistence.
-- Without completing a passkey or Apple based login and supplying the derived wrapping secret, decrypted data is inaccessible.
+- Without completing a passkey-based login and supplying the derived wrapping secret, decrypted data is inaccessible.
 
 ## Next steps
 
 - Plug in a durable passkey challenge store (Redis, DynamoDB) for a multi-process deployment.
-- Wire Apple Sign In to real credentials and provide a UI for linking both login methods to a single account.
 - Expand the trend API with richer aggregates (PR tracking, bodyweight deltas, etc.).
 - Add integration tests that exercise the crypto envelope end-to-end against both SQLite and Postgres.
 - See `docs/deployment.md` and `deploy/docker-compose.yml` for containerized/Postgres deployment instructions.

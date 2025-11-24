@@ -53,12 +53,38 @@ class UserRead(BaseModel):
     updated_at: datetime
 
 
-class TrendPoint(BaseModel):
+class TrendOverviewPoint(BaseModel):
     date: datetime
     total_sets: int
     total_reps: int
-    tonnage: float
-    average_body_weight: float | None = None
+    tonnage_kg: float
+    average_body_weight_kg: float | None = None
+    duration_minutes: float | None = None
+
+
+class TrendBodyWeightPoint(BaseModel):
+    date: datetime
+    average_body_weight_kg: float
+
+
+class TrendDurationPoint(BaseModel):
+    date: datetime
+    duration_minutes: float
+
+
+class TrendExercisePoint(BaseModel):
+    date: datetime
+    exercise: str
+    tonnage_kg: float
+    total_sets: int
+    total_reps: int
+
+
+class TrendResponse(BaseModel):
+    overview: list[TrendOverviewPoint]
+    body_weight: list[TrendBodyWeightPoint]
+    durations: list[TrendDurationPoint]
+    exercise_volume: list[TrendExercisePoint]
 
 
 class TemplateExercise(BaseModel):

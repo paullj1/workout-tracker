@@ -33,7 +33,7 @@ export const updateWorkout = async (payload) => {
 };
 export const deleteWorkout = async (id) => api.delete(`/workouts/${id}`);
 export const fetchTrends = async () => {
-    const { data } = await api.get("/workouts/trends/body");
+    const { data } = await api.get("/workouts/trends");
     return data;
 };
 export const listTemplates = async () => {

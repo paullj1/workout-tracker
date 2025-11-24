@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     environment: Literal["dev", "prod", "test"] = Field(default="dev")
-    database_url: str = Field(default=f"sqlite:///{Path('var').absolute() / 'workout.sqlite3'}")
+    database_url: str = Field(default=f"sqlite:///{Path.cwd() / 'workout.sqlite3'}")
     auth_rp_id: str = Field(default="localhost")
     auth_origin: str = Field(default="http://localhost:5173")
     frontend_base_url: str = Field(default="http://localhost:8000")

@@ -21,4 +21,4 @@ ensure_frontend_bundle() {
 ensure_frontend_bundle
 
 cd "$ROOT"
-uv run uvicorn workout_tracker.app:app --reload "$@"
+uv run workout-tracker-api "$@"

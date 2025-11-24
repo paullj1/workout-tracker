@@ -493,7 +493,7 @@ const GuidedWorkout = ({ templates, onSave, unitPreference, userId, onTimerUpdat
                       <label>
                         Template
                         <select
-                          className="select select--pill"
+                          className="select select--pill select--modern"
                           value={selectedTemplateId}
                           onChange={(event) => setSelectedTemplateId(event.target.value)}
                           aria-label="Select template"
