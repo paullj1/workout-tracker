@@ -681,6 +681,7 @@ const GuidedWorkout = ({
                               <input
                                 type="number"
                                 min={0}
+                                inputMode="numeric"
                                 value={setForm.reps}
                                 onChange={(event) => setSetForm({ ...setForm, reps: Number(event.target.value) })}
                                 placeholder="Reps"

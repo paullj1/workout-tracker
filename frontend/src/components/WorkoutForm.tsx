@@ -144,6 +144,7 @@ const WorkoutForm = ({ onSubmit, unitPreference }: Props) => {
               <input
                 type="number"
                 placeholder="Reps"
+                inputMode="numeric"
                 value={set.reps}
                 onChange={(event) => updateSet(idx, "reps", event.target.value)}
               />

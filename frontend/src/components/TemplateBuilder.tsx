@@ -141,6 +141,7 @@ const TemplateBuilder = ({ templates, onCreate, onUpdate, onDelete, isSubmitting
               <input
                 type="number"
                 min={1}
+                inputMode="numeric"
                 value={exercise.target_sets}
                 onChange={(event) => updateExercise(index, "target_sets", event.target.value)}
               />
@@ -150,6 +151,7 @@ const TemplateBuilder = ({ templates, onCreate, onUpdate, onDelete, isSubmitting
               <input
                 type="number"
                 min={0}
+                inputMode="numeric"
                 value={exercise.target_reps}
                 onChange={(event) => updateExercise(index, "target_reps", event.target.value)}
               />
