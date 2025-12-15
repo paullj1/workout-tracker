@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Template, Workout, WorkoutPayload, WorkoutSet } from "../lib/api";
 import { displayWeight, preferredWeightUnit, toKgFromPreference } from "../lib/units";
 import type { UnitSystem } from "../types/units";
@@ -101,6 +101,8 @@ const GuidedWorkout = ({
   const [setForm, setSetForm] = useState<{ reps: number; weight: string }>(() => persisted?.setForm ?? { reps: 0, weight: "" });
   const [bodyWeight, setBodyWeight] = useState(persisted?.bodyWeight ?? "");
   const [error, setError] = useState<string | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const restAlertedRef = useRef(false);
 
   const activeTemplate = useMemo(
     () => templates.find((template) => template.id === selectedTemplateId) ?? null,
@@ -181,6 +183,33 @@ const GuidedWorkout = ({
     restDurationMs > 0 ? Math.min(100, Math.max(0, (restRemainingMs / restDurationMs) * 100)) : 0;
   const restUsedPercent = restDurationMs > 0 ? 100 - restRemainingPercent : 0;
   const isRestExpired = restDurationMs > 0 && restRemainingMs <= 0 && isActive;
+
+  const playRestAlert = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+      audioContextRef.current = new AudioContextClass();
+    }
+    const ctx = audioContextRef.current;
+    if (ctx.state === "suspended") {
+      ctx.resume();
+    }
+
+    const now = ctx.currentTime;
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, now);
+    oscillator.frequency.exponentialRampToValueAtTime(440, now + 0.15);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.3);
+  }, []);
 
   const workoutHistory = useMemo(() => {
     const groups = new Map<string, WorkoutSet[]>();
@@ -281,6 +310,24 @@ const GuidedWorkout = ({
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
   }, [restAnchor, isActive]);
+
+  useEffect(() => {
+    if (isRestExpired && !restAlertedRef.current) {
+      restAlertedRef.current = true;
+      playRestAlert();
+      return;
+    }
+    if (!isRestExpired) {
+      restAlertedRef.current = false;
+    }
+  }, [isRestExpired, playRestAlert]);
+
+  useEffect(
+    () => () => {
+      audioContextRef.current?.close();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
