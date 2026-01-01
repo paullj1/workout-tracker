@@ -32,8 +32,23 @@ jobs:
         run: npm test
         working-directory: frontend
 
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Run backend tests
+        run: uv run --extra dev pytest -q
+
   build-and-push:
-    needs: frontend-test
+    needs: [frontend-test, backend-test]
     runs-on: ubuntu-latest
     steps:
       - name: Check out repo
