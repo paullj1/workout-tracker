@@ -17,6 +17,7 @@ describe("TemplateBuilder", () => {
     );
 
     await user.type(screen.getByLabelText(/template name/i), "Bodyweight Plan");
+    await user.type(screen.getByPlaceholderText(/exercise/i), "Pushup");
     const typeSelect = screen.getAllByLabelText(/type/i)[0];
     await user.selectOptions(typeSelect, "bodyweight");
     await user.click(screen.getByRole("button", { name: /save template/i }));
@@ -53,6 +54,7 @@ describe("TemplateBuilder", () => {
       />,
     );
 
-    expect(screen.getByText(/Body weight/)).toBeInTheDocument();
+    const list = screen.getByRole("list");
+    expect(list).toHaveTextContent(/Body weight/);
   });
 });
