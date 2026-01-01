@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException, status
@@ -32,7 +32,7 @@ def test_persist_and_consume_challenge(db_session):
 
 def test_expired_challenge_rejected(db_session):
     user = _seed_user(db_session)
-    old_created = datetime.utcnow() - timedelta(seconds=settings.challenge_ttl_seconds + 10)
+    old_created = datetime.now(timezone.utc) - timedelta(seconds=settings.challenge_ttl_seconds + 10)
     challenge = AuthChallenge(
         user=user,
         challenge="stale",
@@ -54,7 +54,7 @@ def test_purge_expired_challenges(db_session):
         user=user,
         challenge="stale",
         purpose="register",
-        created_at=datetime.utcnow() - timedelta(seconds=settings.challenge_ttl_seconds + 5),
+        created_at=datetime.now(timezone.utc) - timedelta(seconds=settings.challenge_ttl_seconds + 5),
     )
     db_session.add_all([fresh, stale])
     db_session.flush()

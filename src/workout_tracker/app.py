@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.resources
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -41,7 +42,12 @@ def _static_dir() -> Path | None:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Workout Tracker", version=settings.environment)
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        adapter.create_schema()
+        yield
+
+    app = FastAPI(title="Workout Tracker", version=settings.environment, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -55,10 +61,6 @@ def create_app() -> FastAPI:
     app.include_router(users.router)
     app.include_router(workouts.router)
     app.include_router(templates.router)
-
-    @app.on_event("startup")
-    def _startup() -> None:
-        adapter.create_schema()
 
     @app.get("/healthz")
     def healthcheck():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import cast
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr
@@ -92,7 +93,7 @@ def passkey_register_begin(
     db.add(user)
     db.flush()
     options = begin_registration(db, user)
-    return PasskeyRegisterBeginResponse(options=options, encryption_token=None)
+    return PasskeyRegisterBeginResponse(options=options, encryption_token=secrets.token_urlsafe(32))
 
 
 @router.post("/passkey/register/complete", response_model=UserRead)

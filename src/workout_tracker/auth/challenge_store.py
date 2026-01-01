@@ -25,9 +25,9 @@ def _as_naive(ts: datetime) -> datetime:
 
 
 def purge_expired_challenges(db: Session) -> int:
-    cutoff = _as_naive(_now() - timedelta(seconds=settings.challenge_ttl_seconds))
+    cutoff = _now() - timedelta(seconds=settings.challenge_ttl_seconds)
     stmt = delete(AuthChallenge).where(AuthChallenge.created_at < cutoff)
-    result = db.execute(stmt)
+    result = db.execute(stmt.execution_options(synchronize_session=False))
     db.flush()
     return result.rowcount or 0
 
