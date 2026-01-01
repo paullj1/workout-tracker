@@ -647,7 +647,6 @@ const GuidedWorkout = ({
       </div>
 
       {error && <small style={{ color: "var(--danger)" }}>{error}</small>}
-
       <div className="guided-wizard">
         <div className="guided-wizard__progress" aria-hidden="true">
           {slides.map((slide, idx) => {
