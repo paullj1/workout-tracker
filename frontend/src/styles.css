@@ -413,6 +413,17 @@ button:disabled {
   background: var(--card-bg);
 }
 
+.ghost--danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.ghost--small {
+  padding: 0.45rem 0.75rem;
+  min-height: 0;
+  font-size: 0.95rem;
+}
+
 input,
 textarea,
 select {
@@ -1098,6 +1109,49 @@ label {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+.history-item__pill {
+  text-align: left;
+  border-style: dashed;
+}
+
+.history-item__pill:focus-visible {
+  outline: 2px solid var(--button-bg);
+  outline-offset: 2px;
+}
+
+.history-edit {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.55rem;
+  border-radius: 12px;
+  border: 1px dashed var(--border-color);
+  background: var(--body-bg);
+  min-width: min(320px, 100%);
+}
+
+.history-edit__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.35rem;
+}
+
+.history-edit__field {
+  display: grid;
+  gap: 0.2rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.history-edit__actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.history-edit__actions button {
+  padding: 0.45rem 0.75rem;
+  min-height: 0;
 }
 
 .finish-row {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Template, Workout, WorkoutPayload, WorkoutSet } from "../lib/api";
 import { displayWeight, preferredWeightUnit, toKgFromPreference } from "../lib/units";
 import type { UnitSystem } from "../types/units";
@@ -101,6 +101,7 @@ const GuidedWorkout = ({
   const [setForm, setSetForm] = useState<{ reps: number; weight: string }>(() => persisted?.setForm ?? { reps: 0, weight: "" });
   const [bodyWeight, setBodyWeight] = useState(persisted?.bodyWeight ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [editingSet, setEditingSet] = useState<{ index: number; reps: number; weight: string } | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const restAlertedRef = useRef(false);
 
@@ -212,10 +213,10 @@ const GuidedWorkout = ({
   }, []);
 
   const workoutHistory = useMemo(() => {
-    const groups = new Map<string, WorkoutSet[]>();
-    loggedSets.forEach((set) => {
+    const groups = new Map<string, { set: WorkoutSet; index: number }[]>();
+    loggedSets.forEach((set, index) => {
       const list = groups.get(set.exercise) ?? [];
-      list.push(set);
+      list.push({ set, index });
       groups.set(set.exercise, list);
     });
     return Array.from(groups.entries()).map(([exercise, sets]) => ({ exercise, sets }));
@@ -236,6 +237,7 @@ const GuidedWorkout = ({
     setLoggedSets([]);
     setNotes("");
     setBodyWeight("");
+    setEditingSet(null);
     setSetForm({ reps: 0, weight: "" });
     setActiveSlide(0);
     setError(null);
@@ -431,6 +433,7 @@ const GuidedWorkout = ({
     setLoggedSets([]);
     setNotes("");
     setBodyWeight("");
+    setEditingSet(null);
     setRestAnchor(new Date());
     setRestMs(0);
     setActiveSlide(1);
@@ -515,6 +518,48 @@ const GuidedWorkout = ({
     setActiveSlide((prev) => Math.min(slides.length - 1, prev + 1));
     setRestAnchor(new Date());
     setRestMs(0);
+  };
+
+  const handleEditSet = (index: number) => {
+    const target = loggedSets[index];
+    if (!target) return;
+    setError(null);
+    setEditingSet({
+      index,
+      reps: target.reps,
+      weight: target.weight === null || target.weight === undefined ? "" : String(target.weight),
+    });
+  };
+
+  const handleEditSubmit = (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    if (!editingSet) return;
+    const repsValue = Number(editingSet.reps);
+    const weightValue = editingSet.weight === "" ? null : Number(editingSet.weight);
+    if (!Number.isFinite(repsValue)) {
+      setError("Reps must be a valid number.");
+      return;
+    }
+    if (weightValue !== null && !Number.isFinite(weightValue)) {
+      setError("Weight must be a valid number.");
+      return;
+    }
+    setLoggedSets((prev) =>
+      prev.map((set, idx) =>
+        idx === editingSet.index
+          ? {
+              ...set,
+              reps: Math.max(0, repsValue),
+              weight: weightValue,
+            }
+          : set,
+      ),
+    );
+    setEditingSet(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSet(null);
   };
 
   const canStart = templates.length > 0 && Boolean(activeTemplate) && exerciseSlides.length > 0;
@@ -816,23 +861,82 @@ const GuidedWorkout = ({
         {workoutHistory.length === 0 ? (
           <p className="card__hint">Sets you log will stack up here.</p>
         ) : (
-          <ul className="history-list">
-            {workoutHistory.map((entry) => (
-              <li key={entry.exercise} className="history-item">
-                <div className="history-item__header">
-                  <strong>{entry.exercise}</strong>
-                  <small>{entry.sets.length} sets</small>
-                </div>
-                <div className="history-item__sets">
-                  {entry.sets.map((set, idx) => (
-                    <span key={`${entry.exercise}-${idx}`} className="pill pill--muted">
-                      Set {idx + 1}: {set.reps} reps @ {displayWeight(set.weight, set.unit, unitPreference)}
-                    </span>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="card__hint">Tap a set to correct the reps or weight.</p>
+            <ul className="history-list">
+              {workoutHistory.map((entry) => (
+                <li key={entry.exercise} className="history-item">
+                  <div className="history-item__header">
+                    <strong>{entry.exercise}</strong>
+                    <small>{entry.sets.length} sets</small>
+                  </div>
+                  <div className="history-item__sets">
+                    {entry.sets.map(({ set, index }, idx) => {
+                      const isEditing = editingSet?.index === index;
+                      if (isEditing) {
+                        return (
+                          <form
+                            key={`${entry.exercise}-${index}-edit`}
+                            className="history-edit"
+                            onSubmit={handleEditSubmit}
+                          >
+                            <div className="history-edit__fields">
+                              <label className="history-edit__field">
+                                <span>Reps</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={editingSet.reps}
+                                  onChange={(event) =>
+                                    setEditingSet((prev) =>
+                                      prev ? { ...prev, reps: Number(event.target.value) } : prev,
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label className="history-edit__field">
+                                <span>Weight</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={editingSet.weight}
+                                  onChange={(event) =>
+                                    setEditingSet((prev) =>
+                                      prev ? { ...prev, weight: event.target.value } : prev,
+                                    )
+                                  }
+                                  placeholder={`Weight (${set.unit})`}
+                                />
+                              </label>
+                            </div>
+                            <div className="history-edit__actions">
+                              <button type="submit" className="ghost">
+                                Save
+                              </button>
+                              <button type="button" className="ghost ghost--danger" onClick={handleCancelEdit}>
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        );
+                      }
+                      return (
+                        <button
+                          key={`${entry.exercise}-${index}`}
+                          type="button"
+                          className="pill pill--muted history-item__pill"
+                          onClick={() => handleEditSet(index)}
+                          aria-label={`Edit set ${idx + 1} of ${entry.exercise}`}
+                        >
+                          Set {idx + 1}: {set.reps} reps @ {displayWeight(set.weight, set.unit, unitPreference)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </div>
