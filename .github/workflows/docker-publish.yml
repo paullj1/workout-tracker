@@ -36,6 +36,14 @@ jobs:
             type=raw,value=latest
             type=sha
 
+      - name: Ensure uv.lock exists
+        run: |
+          if [ ! -f uv.lock ]; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+            uv lock
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
