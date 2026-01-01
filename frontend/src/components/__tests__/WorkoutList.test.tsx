@@ -31,7 +31,7 @@ describe("WorkoutList", () => {
       ],
     };
     render(<WorkoutList workouts={[workout]} unitPreference="metric" onDelete={() => undefined} />);
-    expect(screen.getByText("Bench: 5x100 kg")).toBeInTheDocument();
+    expect(screen.getByText(/Bench:\s*5x100 kg/)).toBeInTheDocument();
   });
 
   it("renders bodyweight modifier summaries", () => {
@@ -48,6 +48,6 @@ describe("WorkoutList", () => {
       ],
     };
     render(<WorkoutList workouts={[workout]} unitPreference="metric" onDelete={() => undefined} />);
-    expect(screen.getByText("Pushup: 10 reps (+2 mod)")).toBeInTheDocument();
+    expect(screen.getByText(/Pushup:\s*10 reps \(\+2 mod\)/)).toBeInTheDocument();
   });
 });
