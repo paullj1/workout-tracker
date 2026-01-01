@@ -81,13 +81,17 @@ const TrendChart = ({ data, unitPreference }: Props) => {
   );
 
   const exerciseTotals = useMemo(() => {
-    const totals = new Map<string, number>();
+    const totals = new Map<string, { tonnage_kg: number; total_reps: number }>();
     (data?.exercise_volume ?? []).forEach((point) => {
-      totals.set(point.exercise, (totals.get(point.exercise) ?? 0) + point.tonnage_kg);
+      const current = totals.get(point.exercise) ?? { tonnage_kg: 0, total_reps: 0 };
+      totals.set(point.exercise, {
+        tonnage_kg: current.tonnage_kg + point.tonnage_kg,
+        total_reps: current.total_reps + point.total_reps,
+      });
     });
     return Array.from(totals.entries())
-      .map(([exercise, tonnage_kg]) => ({ exercise, tonnage_kg }))
-      .sort((a, b) => b.tonnage_kg - a.tonnage_kg);
+      .map(([exercise, metrics]) => ({ exercise, ...metrics }))
+      .sort((a, b) => b.tonnage_kg - a.tonnage_kg || b.total_reps - a.total_reps);
   }, [data]);
 
   const [activeExercise, setActiveExercise] = useState<string | null>(null);
@@ -257,7 +261,7 @@ const TrendChart = ({ data, unitPreference }: Props) => {
                   onClick={() => setActiveExercise(entry.exercise)}
                   aria-pressed={isActive}
                 >
-                  {entry.exercise} • {weightLabel(entry.tonnage_kg)}
+                  {entry.exercise} • {entry.tonnage_kg > 0 ? weightLabel(entry.tonnage_kg) : `${entry.total_reps} reps`}
                 </button>
               );
             })}

@@ -12,8 +12,18 @@ type Props = {
 const formatAggregatedSets = (workout: Workout, unitPreference: UnitSystem): string[] => {
   const groups = new Map<string, string[]>();
   workout.sets.forEach((set) => {
-    const weightLabel = displayWeight(set.weight, set.unit, unitPreference);
-    const entry = `${set.reps}x${weightLabel}`;
+    const setType = set.exercise_type ?? "weighted";
+    const modifier =
+      setType === "bodyweight" && set.weight !== null && set.weight !== undefined && Number.isFinite(set.weight)
+        ? Math.round(set.weight * 10) / 10
+        : null;
+    const weightLabel =
+      setType === "bodyweight"
+        ? modifier
+          ? `${set.reps} reps (+${modifier} mod)`
+          : `${set.reps} reps`
+        : `${set.reps}x${displayWeight(set.weight, set.unit, unitPreference)}`;
+    const entry = weightLabel;
     const list = groups.get(set.exercise) ?? [];
     list.push(entry);
     groups.set(set.exercise, list);

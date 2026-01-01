@@ -4,7 +4,7 @@ import { fromKgToPreference, preferredWeightUnit, toKgFromPreference } from "../
 import type { UnitSystem } from "../types/units";
 
 type Props = {
-  onSubmit: (payload: WorkoutPayload) => void;
+  onSubmit: (payload: WorkoutPayload) => Promise<void> | void;
   unitPreference: UnitSystem;
 };
 
@@ -58,10 +58,14 @@ const WorkoutForm = ({ onSubmit, unitPreference }: Props) => {
     });
   };
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    onSubmit(payload);
-    setPayload((prev) => ({ ...prev, notes: "", sets: [] }));
+    try {
+      await Promise.resolve(onSubmit(payload));
+      setPayload((prev) => ({ ...prev, notes: "", sets: [] }));
+    } catch {
+      // Keep the user's input so they can fix validation issues.
+    }
   };
 
   return (
@@ -109,6 +113,7 @@ const WorkoutForm = ({ onSubmit, unitPreference }: Props) => {
           <input
             type="number"
             min={0}
+            inputMode="numeric"
             value={formattedBodyWeight}
             onChange={(event) =>
               setPayload({
@@ -116,6 +121,7 @@ const WorkoutForm = ({ onSubmit, unitPreference }: Props) => {
                 body_weight: event.target.value ? toKgFromPreference(Number(event.target.value), unitPreference) : null,
               })
             }
+            onFocus={(event) => event.currentTarget.select()}
           />
         </label>
         <label>
@@ -147,12 +153,15 @@ const WorkoutForm = ({ onSubmit, unitPreference }: Props) => {
                 inputMode="numeric"
                 value={set.reps}
                 onChange={(event) => updateSet(idx, "reps", event.target.value)}
+                onFocus={(event) => event.currentTarget.select()}
               />
               <input
                 type="number"
                 placeholder="Weight"
+                inputMode="numeric"
                 value={set.weight ?? ""}
                 onChange={(event) => updateSet(idx, "weight", event.target.value)}
+                onFocus={(event) => event.currentTarget.select()}
               />
               <select value={set.unit} onChange={(event) => updateSet(idx, "unit", event.target.value)}>
                 <option value="kg">kg</option>

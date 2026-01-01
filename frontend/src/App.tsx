@@ -170,9 +170,9 @@ const App = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["templates"] }),
   });
 
-  const handleCreate = (payload: WorkoutPayload) => {
+  const handleCreate = async (payload: WorkoutPayload) => {
     setError(null);
-    createMutation.mutate(payload);
+    await createMutation.mutateAsync(payload);
   };
 
   const handleDelete = (id: string) => deleteMutation.mutate(id);

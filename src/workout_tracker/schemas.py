@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 class WorkoutSet(BaseModel):
     exercise: str
+    exercise_type: Literal["weighted", "bodyweight"] = "weighted"
     reps: int = Field(ge=0)
     weight: float | None = Field(default=None, ge=0)
     unit: Literal["kg", "lb"] = "kg"
@@ -89,6 +90,7 @@ class TrendResponse(BaseModel):
 
 class TemplateExercise(BaseModel):
     name: str
+    exercise_type: Literal["weighted", "bodyweight"] = "weighted"
     target_sets: int = Field(ge=1)
     target_reps: int = Field(ge=0)
     rest_seconds: int = Field(default=0, ge=0, le=3600)

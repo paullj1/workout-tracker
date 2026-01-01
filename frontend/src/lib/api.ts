@@ -12,6 +12,7 @@ export const api = axios.create({
 
 export type WorkoutSet = {
   exercise: string;
+  exercise_type?: "weighted" | "bodyweight";
   reps: number;
   weight?: number | null;
   unit: "kg" | "lb";
@@ -91,6 +92,7 @@ export type AppleAuthPayload = {
 
 export type TemplateExercise = {
   name: string;
+  exercise_type?: "weighted" | "bodyweight";
   target_sets: number;
   target_reps: number;
   rest_seconds?: number;

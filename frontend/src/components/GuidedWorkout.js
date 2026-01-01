@@ -11,6 +11,12 @@ const formatClock = (ms) => {
     const pad = (value) => value.toString().padStart(2, "0");
     return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 };
+const formatModifier = (value) => {
+    if (value === null || value === undefined || value === 0 || !Number.isFinite(value))
+        return null;
+    const rounded = Math.round(value * 10) / 10;
+    return `${rounded}`;
+};
 const STORAGE_KEY_PREFIX = "guided-workout-state";
 const getStorageKey = (userId) => `${STORAGE_KEY_PREFIX}-${userId ?? "anon"}`;
 const loadPersistedState = (storageKey) => {
@@ -78,6 +84,7 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
             ? Math.max(0, exerciseSlides.length - 1)
             : 0;
     const currentExercise = exerciseSlides[currentExerciseIndex] ?? null;
+    const currentExerciseType = currentExercise?.exercise_type ?? "weighted";
     const nextExercise = exerciseSlides[currentExerciseIndex + 1] ?? null;
     const currentExerciseSets = useMemo(() => loggedSets.filter((set) => (currentExercise ? set.exercise === currentExercise.name : false)), [loggedSets, currentExercise]);
     const latestExerciseSets = useMemo(() => {
@@ -98,6 +105,11 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
         });
         return latest;
     }, [workouts]);
+    const previousExerciseSets = useMemo(() => {
+        if (!currentExercise)
+            return [];
+        return latestExerciseSets.get(currentExercise.name) ?? [];
+    }, [currentExercise, latestExerciseSets]);
     const lastSetSuggestion = useMemo(() => {
         if (!currentExercise)
             return null;
@@ -109,11 +121,12 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
             return null;
         return {
             reps: prior.reps,
-            weight: prior.weight === null || prior.weight === undefined
+            modifier: currentExerciseType === "bodyweight" ? prior.weight ?? null : null,
+            weight: currentExerciseType === "bodyweight" || prior.weight === null || prior.weight === undefined
                 ? null
                 : displayWeight(prior.weight, prior.unit, unitPreference),
         };
-    }, [currentExercise, currentExerciseSets.length, latestExerciseSets, unitPreference]);
+    }, [currentExercise, currentExerciseSets.length, currentExerciseType, latestExerciseSets, unitPreference]);
     const hasStarted = Boolean(startTime);
     const isActive = Boolean(startTime && !endTime);
     const hasPrev = activeSlide > 0;
@@ -125,7 +138,15 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
     const restRemainingPercent = restDurationMs > 0 ? Math.min(100, Math.max(0, (restRemainingMs / restDurationMs) * 100)) : 0;
     const restUsedPercent = restDurationMs > 0 ? 100 - restRemainingPercent : 0;
     const isRestExpired = restDurationMs > 0 && restRemainingMs <= 0 && isActive;
-    const playRestAlert = useCallback(() => {
+    const formatSetWeight = (set) => {
+        const setType = set.exercise_type ?? "weighted";
+        if (setType === "bodyweight") {
+            const modifier = formatModifier(set.weight);
+            return modifier ? `+${modifier} mod reps` : "Body weight";
+        }
+        return displayWeight(set.weight, set.unit, unitPreference);
+    };
+    const ensureAudioContext = useCallback(() => {
         if (typeof window === "undefined")
             return;
         const AudioContextClass = window.AudioContext ?? window.webkitAudioContext;
@@ -138,6 +159,12 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
         if (ctx.state === "suspended") {
             ctx.resume();
         }
+    }, []);
+    const playRestAlert = useCallback(() => {
+        ensureAudioContext();
+        const ctx = audioContextRef.current;
+        if (!ctx)
+            return;
         const now = ctx.currentTime;
         const oscillator = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -151,7 +178,24 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
         gain.connect(ctx.destination);
         oscillator.start(now);
         oscillator.stop(now + 0.3);
+    }, [ensureAudioContext]);
+    const ensureNotificationPermission = useCallback(() => {
+        if (typeof window === "undefined" || !("Notification" in window))
+            return;
+        if (Notification.permission === "default") {
+            Notification.requestPermission().catch(() => undefined);
+        }
     }, []);
+    const notifyRestComplete = useCallback(() => {
+        if (typeof window === "undefined" || !("Notification" in window))
+            return;
+        if (Notification.permission !== "granted")
+            return;
+        const body = currentExercise?.name
+            ? `Rest complete for ${currentExercise.name}.`
+            : "Rest complete. Ready for the next set.";
+        new Notification("Rest timer done", { body });
+    }, [currentExercise?.name]);
     const workoutHistory = useMemo(() => {
         const groups = new Map();
         loggedSets.forEach((set, index) => {
@@ -252,12 +296,13 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
         if (isRestExpired && !restAlertedRef.current) {
             restAlertedRef.current = true;
             playRestAlert();
+            notifyRestComplete();
             return;
         }
         if (!isRestExpired) {
             restAlertedRef.current = false;
         }
-    }, [isRestExpired, playRestAlert]);
+    }, [isRestExpired, notifyRestComplete, playRestAlert]);
     useEffect(() => () => {
         audioContextRef.current?.close();
     }, []);
@@ -353,6 +398,8 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
             return;
         }
         setError(null);
+        ensureNotificationPermission();
+        ensureAudioContext();
         setStartTime(new Date());
         setEndTime(null);
         setLoggedSets([]);
@@ -377,8 +424,10 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
             return;
         }
         setError(null);
+        ensureAudioContext();
         const next = {
             exercise: currentExercise.name,
+            exercise_type: currentExerciseType,
             reps: Number(setForm.reps),
             unit: preferredUnit,
             weight: setForm.weight !== "" ? Number(setForm.weight) : null,
@@ -393,7 +442,7 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
             setRestAnchor(new Date());
         }
     };
-    const handleFinish = () => {
+    const handleFinish = async () => {
         if (!startTime) {
             setError("Start a workout before finishing.");
             return;
@@ -406,8 +455,6 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
         if (!confirmed)
             return;
         const finishAt = new Date();
-        setEndTime(finishAt);
-        setRestAnchor(null);
         const payload = {
             title: activeTemplate ? `${activeTemplate.name} Session` : "Workout",
             start_time: startTime.toISOString(),
@@ -418,8 +465,15 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
             notes,
             sets: loggedSets,
         };
-        onSave(payload);
-        resetSession();
+        try {
+            await Promise.resolve(onSave(payload));
+            setEndTime(finishAt);
+            setRestAnchor(null);
+            resetSession();
+        }
+        catch {
+            setError("Saving workout failed. Please review the entries and try again.");
+        }
     };
     const handleAbort = () => {
         const hasProgress = startTime || loggedSets.length > 0 || notes || bodyWeight;
@@ -497,23 +551,23 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
                                 }
                                 if (slide.type === "exercise" && currentExercise) {
                                     const isCurrent = slide.index === currentExerciseIndex;
-                                    return (_jsxs("section", { className: "guided-wizard__slide", children: [isCurrent && (_jsxs(_Fragment, { children: [_jsxs("div", { className: "exercise-stage__header", children: [_jsxs("div", { className: "exercise-stage__meta", children: [_jsxs("p", { className: "exercise-card__eyebrow", children: ["Exercise ", currentExerciseIndex + 1, " of ", exerciseTotal] }), _jsx("div", { className: "exercise-stage__status", children: isActive && _jsxs("span", { className: "pill", children: ["Set ", currentSetNumber] }) })] }), _jsx("h3", { className: "exercise-card__title", children: currentExercise.name }), _jsxs("p", { className: "card__hint", children: ["Target: ", currentExercise.target_sets, " sets \u00D7 ", currentExercise.target_reps, " reps \u2022", " ", currentExercise.rest_seconds ? `${currentExercise.rest_seconds}s rest` : "Rest as needed"] }), _jsxs("small", { className: "exercise-card__next", children: ["Next: ", nextExercise ? nextExercise.name : "Wrap up"] })] }), _jsxs("div", { className: "exercise-stage__body", children: [_jsx("div", { className: "exercise-stage__history", children: currentExerciseSets.length === 0 ? (_jsx("p", { className: "card__hint", children: "No sets logged for this exercise yet." })) : (currentExerciseSets.map((set, idx) => (_jsxs("div", { className: "set-table__row", children: [_jsxs("span", { className: "set-table__cell", children: ["Set ", idx + 1] }), _jsxs("span", { className: "set-table__cell", children: [set.reps, " reps"] }), _jsx("span", { className: "set-table__cell", children: displayWeight(set.weight, set.unit, unitPreference) })] }, `current-set-${idx}`)))) }), _jsxs("div", { className: "set-row set-row--inline exercise-stage__form", onKeyDown: (event) => {
+                                    return (_jsxs("section", { className: "guided-wizard__slide", children: [isCurrent && (_jsxs(_Fragment, { children: [_jsxs("div", { className: "exercise-stage__header", children: [_jsxs("div", { className: "exercise-stage__meta", children: [_jsxs("p", { className: "exercise-card__eyebrow", children: ["Exercise ", currentExerciseIndex + 1, " of ", exerciseTotal] }), _jsx("div", { className: "exercise-stage__status", children: isActive && _jsxs("span", { className: "pill", children: ["Set ", currentSetNumber] }) })] }), _jsx("h3", { className: "exercise-card__title", children: currentExercise.name }), _jsxs("p", { className: "card__hint", children: ["Target: ", currentExercise.target_sets, " sets \u00D7 ", currentExercise.target_reps, " reps \u2022", " ", currentExerciseType === "bodyweight" ? "Body weight" : "Weighted", " \u2022", " ", currentExercise.rest_seconds ? `${currentExercise.rest_seconds}s rest` : "Rest as needed"] }), _jsxs("small", { className: "exercise-card__next", children: ["Next: ", nextExercise ? nextExercise.name : "Wrap up"] })] }), _jsxs("div", { className: "exercise-stage__body", children: [_jsxs("div", { className: "exercise-stage__history", children: [previousExerciseSets.length > 0 && (_jsxs(_Fragment, { children: [_jsx("p", { className: "card__hint", children: "Previous session" }), previousExerciseSets.map((set, idx) => (_jsxs("div", { className: "set-table__row", children: [_jsxs("span", { className: "set-table__cell", children: ["Prev ", idx + 1] }), _jsxs("span", { className: "set-table__cell", children: [set.reps, " reps"] }), _jsx("span", { className: "set-table__cell", children: formatSetWeight(set) })] }, `previous-set-${idx}`)))] })), currentExerciseSets.length === 0 ? (_jsx("p", { className: "card__hint", children: "No sets logged for this exercise yet." })) : (currentExerciseSets.map((set, idx) => (_jsxs("div", { className: "set-table__row", children: [_jsxs("span", { className: "set-table__cell", children: ["Set ", idx + 1] }), _jsxs("span", { className: "set-table__cell", children: [set.reps, " reps"] }), _jsx("span", { className: "set-table__cell", children: formatSetWeight(set) })] }, `current-set-${idx}`)))))] }), _jsxs("div", { className: "set-row set-row--inline exercise-stage__form", onKeyDown: (event) => {
                                                                     if (event.key === "Enter") {
                                                                         event.preventDefault();
                                                                         handleAddSet();
                                                                     }
-                                                                }, children: [_jsxs("div", { className: "set-row__field", children: [_jsx("input", { type: "number", min: 0, inputMode: "numeric", value: setForm.reps, onChange: (event) => setSetForm({ ...setForm, reps: Number(event.target.value) }), placeholder: "Reps", disabled: !activeTemplate || !isActive }), lastSetSuggestion && (_jsxs("div", { className: "set-row__hint card__hint", children: ["Last: ", lastSetSuggestion.reps, " reps"] }))] }), _jsxs("div", { className: "set-row__field", children: [_jsx("input", { type: "number", min: 0, value: setForm.weight, onChange: (event) => setSetForm({ ...setForm, weight: event.target.value }), placeholder: `Weight (${preferredUnit})`, disabled: !activeTemplate || !isActive }), lastSetSuggestion?.weight && (_jsxs("div", { className: "set-row__hint card__hint", children: ["Last: ", lastSetSuggestion.weight] }))] }), _jsx("button", { type: "button", className: "set-row__action", onClick: handleAddSet, disabled: !activeTemplate || !isActive, "aria-label": "Save set", children: "\u23CE" })] })] })] })), _jsxs("div", { className: "guided-wizard__nav", children: [_jsx("button", { type: "button", className: "ghost", onClick: handlePrev, disabled: !hasPrev, children: "\u2190 Back" }), _jsx("div", { className: "guided-wizard__nav-status" }), _jsxs("button", { type: "button", onClick: handleNext, disabled: !hasNext, children: [wrapNextLabel, " \u2192"] })] })] }, slide.key));
+                                                                }, children: [_jsxs("div", { className: "set-row__field", children: [_jsx("input", { type: "number", min: 0, inputMode: "numeric", value: setForm.reps, onChange: (event) => setSetForm({ ...setForm, reps: Number(event.target.value) }), onFocus: (event) => event.currentTarget.select(), placeholder: "Reps", disabled: !activeTemplate || !isActive }), lastSetSuggestion && (_jsxs("div", { className: "set-row__hint card__hint", children: ["Last: ", lastSetSuggestion.reps, " reps"] }))] }), _jsxs("div", { className: "set-row__field", children: [_jsx("input", { type: "number", min: 0, inputMode: "numeric", value: setForm.weight, onChange: (event) => setSetForm({ ...setForm, weight: event.target.value }), onFocus: (event) => event.currentTarget.select(), placeholder: currentExerciseType === "bodyweight" ? "Modified reps" : `Weight (${preferredUnit})`, disabled: !activeTemplate || !isActive }), currentExerciseType === "bodyweight" && formatModifier(lastSetSuggestion?.modifier) && (_jsxs("div", { className: "set-row__hint card__hint", children: ["Last: +", formatModifier(lastSetSuggestion?.modifier), " mod reps"] })), currentExerciseType !== "bodyweight" && lastSetSuggestion?.weight && (_jsxs("div", { className: "set-row__hint card__hint", children: ["Last: ", lastSetSuggestion.weight] }))] }), _jsx("button", { type: "button", className: "set-row__action", onClick: handleAddSet, disabled: !activeTemplate || !isActive, "aria-label": "Save set", children: "\u23CE" })] })] })] })), _jsxs("div", { className: "guided-wizard__nav", children: [_jsx("button", { type: "button", className: "ghost", onClick: handlePrev, disabled: !hasPrev, children: "\u2190 Back" }), _jsx("div", { className: "guided-wizard__nav-status" }), _jsxs("button", { type: "button", onClick: handleNext, disabled: !hasNext, children: [wrapNextLabel, " \u2192"] })] })] }, slide.key));
                                 }
                                 if (slide.type === "finish") {
-                                    return (_jsxs("section", { className: "guided-wizard__slide", children: [_jsx("div", { className: "section-heading", children: _jsxs("div", { children: [_jsxs("p", { className: "exercise-card__eyebrow", children: ["Step ", slides.length] }), _jsx("h3", { children: "Wrap up" }), _jsx("p", { className: "card__hint", children: "Capture notes and body weight before saving." })] }) }), _jsxs("div", { className: "guided-summary", children: [_jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Elapsed" }), _jsx("strong", { children: formatClock(startTime ? elapsedMs : null) })] }), _jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Sets logged" }), _jsx("strong", { children: loggedSets.length })] }), _jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Template" }), _jsx("strong", { children: activeTemplate?.name ?? "—" })] })] }), _jsxs("div", { className: "form-grid", children: [_jsxs("label", { children: ["Session notes", _jsx("textarea", { rows: 3, value: notes, onChange: (event) => setNotes(event.target.value), placeholder: "Energy, PRs, anything worth remembering." })] }), _jsxs("label", { children: ["Body weight (", preferredUnit, ")", _jsx("input", { type: "number", min: 0, value: bodyWeight, onChange: (event) => setBodyWeight(event.target.value) })] })] }), _jsxs("div", { className: "guided-wizard__nav", children: [_jsx("button", { type: "button", className: "ghost", onClick: handlePrev, disabled: !hasPrev, children: "\u2190 Back" }), _jsx("div", { className: "guided-wizard__nav-status", children: _jsxs("small", { children: ["Slide ", activeSlide + 1, " of ", slides.length] }) }), _jsx("button", { type: "button", className: "ghost ghost--danger ghost--small", onClick: handleAbort, disabled: !canAbort, children: "\uD83D\uDED1 Abort" })] }), _jsx("button", { type: "button", className: `finish-button${isRestExpired ? " finish-button--alert" : ""}`, onClick: handleFinish, disabled: !startTime || Boolean(endTime), children: "\uD83C\uDFC1 Finish" })] }, slide.key));
+                                    return (_jsxs("section", { className: "guided-wizard__slide", children: [_jsx("div", { className: "section-heading", children: _jsxs("div", { children: [_jsxs("p", { className: "exercise-card__eyebrow", children: ["Step ", slides.length] }), _jsx("h3", { children: "Wrap up" }), _jsx("p", { className: "card__hint", children: "Capture notes and body weight before saving." })] }) }), _jsxs("div", { className: "guided-summary", children: [_jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Elapsed" }), _jsx("strong", { children: formatClock(startTime ? elapsedMs : null) })] }), _jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Sets logged" }), _jsx("strong", { children: loggedSets.length })] }), _jsxs("div", { className: "guided-summary__item", children: [_jsx("p", { className: "card__hint", children: "Template" }), _jsx("strong", { children: activeTemplate?.name ?? "—" })] })] }), _jsxs("div", { className: "form-grid", children: [_jsxs("label", { children: ["Session notes", _jsx("textarea", { rows: 3, value: notes, onChange: (event) => setNotes(event.target.value), placeholder: "Energy, PRs, anything worth remembering." })] }), _jsxs("label", { children: ["Body weight (", preferredUnit, ")", _jsx("input", { type: "number", min: 0, inputMode: "numeric", value: bodyWeight, onChange: (event) => setBodyWeight(event.target.value), onFocus: (event) => event.currentTarget.select() })] })] }), _jsxs("div", { className: "guided-wizard__nav", children: [_jsx("button", { type: "button", className: "ghost", onClick: handlePrev, disabled: !hasPrev, children: "\u2190 Back" }), _jsx("div", { className: "guided-wizard__nav-status", children: _jsxs("small", { children: ["Slide ", activeSlide + 1, " of ", slides.length] }) }), _jsx("button", { type: "button", className: "ghost ghost--danger ghost--small", onClick: handleAbort, disabled: !canAbort, children: "\uD83D\uDED1 Abort" })] }), _jsx("button", { type: "button", className: `finish-button${isRestExpired ? " finish-button--alert" : ""}`, onClick: handleFinish, disabled: !startTime || Boolean(endTime), children: "\uD83C\uDFC1 Finish" })] }, slide.key));
                                 }
                                 return null;
-                            }) }) })] }), _jsxs("div", { className: "card card--subdued history-card", children: [_jsxs("div", { className: "section-heading", children: [_jsx("h3", { children: "Session log" }), _jsxs("small", { children: [loggedSets.length, " sets"] })] }), workoutHistory.length === 0 ? (_jsx("p", { className: "card__hint", children: "Sets you log will stack up here." })) : (_jsxs(_Fragment, { children: [_jsx("p", { className: "card__hint", children: "Tap a set to correct the reps or weight." }), _jsx("ul", { className: "history-list", children: workoutHistory.map((entry) => (_jsxs("li", { className: "history-item", children: [_jsxs("div", { className: "history-item__header", children: [_jsx("strong", { children: entry.exercise }), _jsxs("small", { children: [entry.sets.length, " sets"] })] }), _jsx("div", { className: "history-item__sets", children: entry.sets.map(({ set, index }, idx) => {
+                            }) }) })] }), _jsxs("div", { className: "card card--subdued history-card", children: [_jsxs("div", { className: "section-heading", children: [_jsx("h3", { children: "Session log" }), _jsxs("small", { children: [loggedSets.length, " sets"] })] }), workoutHistory.length === 0 ? (_jsx("p", { className: "card__hint", children: "Sets you log will stack up here." })) : (_jsxs(_Fragment, { children: [_jsx("p", { className: "card__hint", children: "Tap a set to correct reps or modifiers." }), _jsx("ul", { className: "history-list", children: workoutHistory.map((entry) => (_jsxs("li", { className: "history-item", children: [_jsxs("div", { className: "history-item__header", children: [_jsx("strong", { children: entry.exercise }), _jsxs("small", { children: [entry.sets.length, " sets"] })] }), _jsx("div", { className: "history-item__sets", children: entry.sets.map(({ set, index }, idx) => {
                                                 const isEditing = editingSet?.index === index;
                                                 if (isEditing) {
-                                                    return (_jsxs("form", { className: "history-edit", onSubmit: handleEditSubmit, children: [_jsxs("div", { className: "history-edit__fields", children: [_jsxs("label", { className: "history-edit__field", children: [_jsx("span", { children: "Reps" }), _jsx("input", { type: "number", min: 0, value: editingSet.reps, onChange: (event) => setEditingSet((prev) => prev ? { ...prev, reps: Number(event.target.value) } : prev) })] }), _jsxs("label", { className: "history-edit__field", children: [_jsx("span", { children: "Weight" }), _jsx("input", { type: "number", min: 0, value: editingSet.weight, onChange: (event) => setEditingSet((prev) => prev ? { ...prev, weight: event.target.value } : prev), placeholder: `Weight (${set.unit})` })] })] }), _jsxs("div", { className: "history-edit__actions", children: [_jsx("button", { type: "submit", className: "ghost", children: "Save" }), _jsx("button", { type: "button", className: "ghost ghost--danger", onClick: handleCancelEdit, children: "Cancel" })] })] }, `${entry.exercise}-${index}-edit`));
+                                                    return (_jsxs("form", { className: "history-edit", onSubmit: handleEditSubmit, children: [_jsxs("div", { className: "history-edit__fields", children: [_jsxs("label", { className: "history-edit__field", children: [_jsx("span", { children: "Reps" }), _jsx("input", { type: "number", min: 0, inputMode: "numeric", value: editingSet.reps, onChange: (event) => setEditingSet((prev) => prev ? { ...prev, reps: Number(event.target.value) } : prev), onFocus: (event) => event.currentTarget.select() })] }), _jsxs("label", { className: "history-edit__field", children: [_jsx("span", { children: set.exercise_type === "bodyweight" ? "Modified reps" : "Weight" }), _jsx("input", { type: "number", min: 0, inputMode: "numeric", value: editingSet.weight, onChange: (event) => setEditingSet((prev) => prev ? { ...prev, weight: event.target.value } : prev), placeholder: set.exercise_type === "bodyweight" ? "Modified reps" : `Weight (${set.unit})`, onFocus: (event) => event.currentTarget.select() })] })] }), _jsxs("div", { className: "history-edit__actions", children: [_jsx("button", { type: "submit", className: "ghost", children: "Save" }), _jsx("button", { type: "button", className: "ghost ghost--danger", onClick: handleCancelEdit, children: "Cancel" })] })] }, `${entry.exercise}-${index}-edit`));
                                                 }
-                                                return (_jsxs("button", { type: "button", className: "pill pill--muted history-item__pill", onClick: () => handleEditSet(index), "aria-label": `Edit set ${idx + 1} of ${entry.exercise}`, children: ["Set ", idx + 1, ": ", set.reps, " reps @ ", displayWeight(set.weight, set.unit, unitPreference)] }, `${entry.exercise}-${index}`));
+                                                return (_jsxs("button", { type: "button", className: "pill pill--muted history-item__pill", onClick: () => handleEditSet(index), "aria-label": `Edit set ${idx + 1} of ${entry.exercise}`, children: ["Set ", idx + 1, ": ", set.reps, " reps", set.exercise_type === "bodyweight" ? ` (${formatSetWeight(set)})` : ` @ ${formatSetWeight(set)}`] }, `${entry.exercise}-${index}`));
                                             }) })] }, entry.exercise))) })] }))] })] }));
 };
 export default GuidedWorkout;

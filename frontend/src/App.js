@@ -135,9 +135,9 @@ const App = () => {
         mutationFn: (id) => deleteTemplate(id),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ["templates"] }),
     });
-    const handleCreate = (payload) => {
+    const handleCreate = async (payload) => {
         setError(null);
-        createMutation.mutate(payload);
+        await createMutation.mutateAsync(payload);
     };
     const handleDelete = (id) => deleteMutation.mutate(id);
     const handleTimerUpdate = (elapsedMs) => {

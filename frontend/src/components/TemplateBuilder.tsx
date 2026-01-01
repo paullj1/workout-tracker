@@ -10,7 +10,7 @@ type Props = {
   isUpdating?: boolean;
 };
 
-const blankExercise = () => ({ name: "", target_sets: 3, target_reps: 8, rest_seconds: 90 });
+const blankExercise = () => ({ name: "", exercise_type: "weighted" as const, target_sets: 3, target_reps: 8, rest_seconds: 90 });
 
 const TemplateBuilder = ({ templates, onCreate, onUpdate, onDelete, isSubmitting = false, isUpdating = false }: Props) => {
   const [draft, setDraft] = useState<TemplatePayload>({ name: "", notes: "", exercises: [blankExercise()] });
@@ -24,14 +24,14 @@ const TemplateBuilder = ({ templates, onCreate, onUpdate, onDelete, isSubmitting
 
   const updateExercise = (
     index: number,
-    key: "name" | "target_sets" | "target_reps" | "rest_seconds",
+    key: "name" | "exercise_type" | "target_sets" | "target_reps" | "rest_seconds",
     value: string,
   ) => {
     setDraft((prev) => {
       const copy = [...prev.exercises];
       copy[index] = {
         ...copy[index],
-        [key]: key === "name" ? value : Number(value),
+        [key]: key === "name" || key === "exercise_type" ? value : Number(value),
       };
       return { ...prev, exercises: copy };
     });
@@ -62,6 +62,7 @@ const TemplateBuilder = ({ templates, onCreate, onUpdate, onDelete, isSubmitting
       notes: template.notes ?? "",
       exercises: template.exercises.map((exercise) => ({
         name: exercise.name,
+        exercise_type: exercise.exercise_type ?? "weighted",
         target_sets: exercise.target_sets,
         target_reps: exercise.target_reps,
         rest_seconds: exercise.rest_seconds ?? 0,
@@ -77,6 +78,7 @@ const TemplateBuilder = ({ templates, onCreate, onUpdate, onDelete, isSubmitting
       notes: template.notes ?? "",
       exercises: template.exercises.map((exercise) => ({
         name: exercise.name,
+        exercise_type: exercise.exercise_type ?? "weighted",
         target_sets: exercise.target_sets,
         target_reps: exercise.target_reps,
         rest_seconds: exercise.rest_seconds ?? 0,
@@ -136,6 +138,16 @@ const TemplateBuilder = ({ templates, onCreate, onUpdate, onDelete, isSubmitting
               onChange={(event) => updateExercise(index, "name", event.target.value)}
               required
             />
+            <label className="inline-label">
+              Type
+              <select
+                value={exercise.exercise_type ?? "weighted"}
+                onChange={(event) => updateExercise(index, "exercise_type", event.target.value)}
+              >
+                <option value="weighted">Weighted</option>
+                <option value="bodyweight">Body weight</option>
+              </select>
+            </label>
             <label className="inline-label">
               Sets
               <input
@@ -217,7 +229,9 @@ const TemplateBuilder = ({ templates, onCreate, onUpdate, onDelete, isSubmitting
                 <ul className="template-card__list">
                   {template.exercises.map((exercise, idx) => (
                     <li key={`${template.id}-ex-${idx}`}>
-                      {exercise.name}: {exercise.target_sets} x {exercise.target_reps} • Rest {exercise.rest_seconds ?? 0}s
+                      {exercise.name}: {exercise.target_sets} x {exercise.target_reps} •{" "}
+                      {exercise.exercise_type === "bodyweight" ? "Body weight" : "Weighted"} • Rest{" "}
+                      {exercise.rest_seconds ?? 0}s
                     </li>
                   ))}
                 </ul>

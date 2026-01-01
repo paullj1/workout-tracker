@@ -68,3 +68,17 @@ def delete_template(
 ) -> None:
     record = _get_template_or_404(db, user, template_id)
     db.delete(record)
+
+
+@router.put("/{template_id}", response_model=TemplateRead)
+def update_template(
+    template_id: str,
+    payload: TemplateCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    data_key: bytes = Depends(get_data_key),
+    encryption_service: EncryptionService = Depends(get_encryption_service),
+) -> TemplateRead:
+    record = _get_template_or_404(db, user, template_id)
+    record.encrypted_payload = encryption_service.encrypt_payload(data_key, payload.model_dump())
+    return _serialize(record, payload)

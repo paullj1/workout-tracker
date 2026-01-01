@@ -11,7 +11,7 @@ type Slide =
 type Props = {
   templates: Template[];
   workouts: Workout[];
-  onSave: (payload: WorkoutPayload) => void;
+  onSave: (payload: WorkoutPayload) => Promise<void> | void;
   unitPreference: UnitSystem;
   userId?: string;
   onTimerUpdate?: (elapsedMs: number | null) => void;
@@ -33,6 +33,14 @@ const formatClock = (ms: number | null) => {
   const pad = (value: number) => value.toString().padStart(2, "0");
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 };
+
+const formatModifier = (value: number | null | undefined): string | null => {
+  if (value === null || value === undefined || value === 0 || !Number.isFinite(value)) return null;
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded}`;
+};
+
+
 
 type PersistedWorkoutState = {
   selectedTemplateId: string;
@@ -133,6 +141,7 @@ const GuidedWorkout = ({
         ? Math.max(0, exerciseSlides.length - 1)
         : 0;
   const currentExercise = exerciseSlides[currentExerciseIndex] ?? null;
+  const currentExerciseType = currentExercise?.exercise_type ?? "weighted";
   const nextExercise = exerciseSlides[currentExerciseIndex + 1] ?? null;
   const currentExerciseSets = useMemo(
     () => loggedSets.filter((set) => (currentExercise ? set.exercise === currentExercise.name : false)),
@@ -158,6 +167,10 @@ const GuidedWorkout = ({
     });
     return latest;
   }, [workouts]);
+  const previousExerciseSets = useMemo(() => {
+    if (!currentExercise) return [];
+    return latestExerciseSets.get(currentExercise.name) ?? [];
+  }, [currentExercise, latestExerciseSets]);
   const lastSetSuggestion = useMemo(() => {
     if (!currentExercise) return null;
     const priorSets = latestExerciseSets.get(currentExercise.name);
@@ -166,12 +179,13 @@ const GuidedWorkout = ({
     if (!prior) return null;
     return {
       reps: prior.reps,
+      modifier: currentExerciseType === "bodyweight" ? prior.weight ?? null : null,
       weight:
-        prior.weight === null || prior.weight === undefined
+        currentExerciseType === "bodyweight" || prior.weight === null || prior.weight === undefined
           ? null
           : displayWeight(prior.weight, prior.unit, unitPreference),
     };
-  }, [currentExercise, currentExerciseSets.length, latestExerciseSets, unitPreference]);
+  }, [currentExercise, currentExerciseSets.length, currentExerciseType, latestExerciseSets, unitPreference]);
   const hasStarted = Boolean(startTime);
   const isActive = Boolean(startTime && !endTime);
   const hasPrev = activeSlide > 0;
@@ -185,7 +199,16 @@ const GuidedWorkout = ({
   const restUsedPercent = restDurationMs > 0 ? 100 - restRemainingPercent : 0;
   const isRestExpired = restDurationMs > 0 && restRemainingMs <= 0 && isActive;
 
-  const playRestAlert = useCallback(() => {
+  const formatSetWeight = (set: WorkoutSet) => {
+    const setType = set.exercise_type ?? "weighted";
+    if (setType === "bodyweight") {
+      const modifier = formatModifier(set.weight);
+      return modifier ? `+${modifier} mod reps` : "Body weight";
+    }
+    return displayWeight(set.weight, set.unit, unitPreference);
+  };
+
+  const ensureAudioContext = useCallback(() => {
     if (typeof window === "undefined") return;
     const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
@@ -196,6 +219,12 @@ const GuidedWorkout = ({
     if (ctx.state === "suspended") {
       ctx.resume();
     }
+  }, []);
+
+  const playRestAlert = useCallback(() => {
+    ensureAudioContext();
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
 
     const now = ctx.currentTime;
     const oscillator = ctx.createOscillator();
@@ -210,7 +239,23 @@ const GuidedWorkout = ({
     gain.connect(ctx.destination);
     oscillator.start(now);
     oscillator.stop(now + 0.3);
+  }, [ensureAudioContext]);
+
+  const ensureNotificationPermission = useCallback(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission === "default") {
+      Notification.requestPermission().catch(() => undefined);
+    }
   }, []);
+
+  const notifyRestComplete = useCallback(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    const body = currentExercise?.name
+      ? `Rest complete for ${currentExercise.name}.`
+      : "Rest complete. Ready for the next set.";
+    new Notification("Rest timer done", { body });
+  }, [currentExercise?.name]);
 
   const workoutHistory = useMemo(() => {
     const groups = new Map<string, { set: WorkoutSet; index: number }[]>();
@@ -317,12 +362,13 @@ const GuidedWorkout = ({
     if (isRestExpired && !restAlertedRef.current) {
       restAlertedRef.current = true;
       playRestAlert();
+      notifyRestComplete();
       return;
     }
     if (!isRestExpired) {
       restAlertedRef.current = false;
     }
-  }, [isRestExpired, playRestAlert]);
+  }, [isRestExpired, notifyRestComplete, playRestAlert]);
 
   useEffect(
     () => () => {
@@ -428,6 +474,8 @@ const GuidedWorkout = ({
       return;
     }
     setError(null);
+    ensureNotificationPermission();
+    ensureAudioContext();
     setStartTime(new Date());
     setEndTime(null);
     setLoggedSets([]);
@@ -453,8 +501,10 @@ const GuidedWorkout = ({
       return;
     }
     setError(null);
+    ensureAudioContext();
     const next: WorkoutSet = {
       exercise: currentExercise.name,
+      exercise_type: currentExerciseType,
       reps: Number(setForm.reps),
       unit: preferredUnit,
       weight: setForm.weight !== "" ? Number(setForm.weight) : null,
@@ -470,7 +520,7 @@ const GuidedWorkout = ({
     }
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     if (!startTime) {
       setError("Start a workout before finishing.");
       return;
@@ -482,8 +532,6 @@ const GuidedWorkout = ({
     const confirmed = window.confirm("Wrap up and save this workout?");
     if (!confirmed) return;
     const finishAt = new Date();
-    setEndTime(finishAt);
-    setRestAnchor(null);
     const payload: WorkoutPayload = {
       title: activeTemplate ? `${activeTemplate.name} Session` : "Workout",
       start_time: startTime.toISOString(),
@@ -494,8 +542,14 @@ const GuidedWorkout = ({
       notes,
       sets: loggedSets,
     };
-    onSave(payload);
-    resetSession();
+    try {
+      await Promise.resolve(onSave(payload));
+      setEndTime(finishAt);
+      setRestAnchor(null);
+      resetSession();
+    } catch {
+      setError("Saving workout failed. Please review the entries and try again.");
+    }
   };
 
   const handleAbort = () => {
@@ -691,6 +745,7 @@ const GuidedWorkout = ({
                           <h3 className="exercise-card__title">{currentExercise.name}</h3>
                           <p className="card__hint">
                             Target: {currentExercise.target_sets} sets × {currentExercise.target_reps} reps •{" "}
+                            {currentExerciseType === "bodyweight" ? "Body weight" : "Weighted"} •{" "}
                             {currentExercise.rest_seconds ? `${currentExercise.rest_seconds}s rest` : "Rest as needed"}
                           </p>
                           <small className="exercise-card__next">
@@ -699,6 +754,18 @@ const GuidedWorkout = ({
                         </div>
                         <div className="exercise-stage__body">
                           <div className="exercise-stage__history">
+                            {previousExerciseSets.length > 0 && (
+                              <>
+                                <p className="card__hint">Previous session</p>
+                                {previousExerciseSets.map((set, idx) => (
+                                  <div key={`previous-set-${idx}`} className="set-table__row">
+                                    <span className="set-table__cell">Prev {idx + 1}</span>
+                                    <span className="set-table__cell">{set.reps} reps</span>
+                                    <span className="set-table__cell">{formatSetWeight(set)}</span>
+                                  </div>
+                                ))}
+                              </>
+                            )}
                             {currentExerciseSets.length === 0 ? (
                               <p className="card__hint">No sets logged for this exercise yet.</p>
                               ) : (
@@ -707,7 +774,7 @@ const GuidedWorkout = ({
                                   <span className="set-table__cell">Set {idx + 1}</span>
                                   <span className="set-table__cell">{set.reps} reps</span>
                                   <span className="set-table__cell">
-                                    {displayWeight(set.weight, set.unit, unitPreference)}
+                                    {formatSetWeight(set)}
                                   </span>
                                 </div>
                               ))
@@ -729,6 +796,7 @@ const GuidedWorkout = ({
                                 inputMode="numeric"
                                 value={setForm.reps}
                                 onChange={(event) => setSetForm({ ...setForm, reps: Number(event.target.value) })}
+                                onFocus={(event) => event.currentTarget.select()}
                                 placeholder="Reps"
                                 disabled={!activeTemplate || !isActive}
                               />
@@ -740,12 +808,19 @@ const GuidedWorkout = ({
                               <input
                                 type="number"
                                 min={0}
+                                inputMode="numeric"
                                 value={setForm.weight}
                                 onChange={(event) => setSetForm({ ...setForm, weight: event.target.value })}
-                                placeholder={`Weight (${preferredUnit})`}
+                                onFocus={(event) => event.currentTarget.select()}
+                                placeholder={currentExerciseType === "bodyweight" ? "Modified reps" : `Weight (${preferredUnit})`}
                                 disabled={!activeTemplate || !isActive}
                               />
-                              {lastSetSuggestion?.weight && (
+                              {currentExerciseType === "bodyweight" && formatModifier(lastSetSuggestion?.modifier) && (
+                                <div className="set-row__hint card__hint">
+                                  Last: +{formatModifier(lastSetSuggestion?.modifier)} mod reps
+                                </div>
+                              )}
+                              {currentExerciseType !== "bodyweight" && lastSetSuggestion?.weight && (
                                 <div className="set-row__hint card__hint">Last: {lastSetSuggestion.weight}</div>
                               )}
                             </div>
@@ -814,8 +889,10 @@ const GuidedWorkout = ({
                         <input
                           type="number"
                           min={0}
+                          inputMode="numeric"
                           value={bodyWeight}
                           onChange={(event) => setBodyWeight(event.target.value)}
+                          onFocus={(event) => event.currentTarget.select()}
                         />
                       </label>
                     </div>
@@ -862,7 +939,7 @@ const GuidedWorkout = ({
           <p className="card__hint">Sets you log will stack up here.</p>
         ) : (
           <>
-            <p className="card__hint">Tap a set to correct the reps or weight.</p>
+            <p className="card__hint">Tap a set to correct reps or modifiers.</p>
             <ul className="history-list">
               {workoutHistory.map((entry) => (
                 <li key={entry.exercise} className="history-item">
@@ -886,26 +963,30 @@ const GuidedWorkout = ({
                                 <input
                                   type="number"
                                   min={0}
+                                  inputMode="numeric"
                                   value={editingSet.reps}
                                   onChange={(event) =>
                                     setEditingSet((prev) =>
                                       prev ? { ...prev, reps: Number(event.target.value) } : prev,
                                     )
                                   }
+                                  onFocus={(event) => event.currentTarget.select()}
                                 />
                               </label>
                               <label className="history-edit__field">
-                                <span>Weight</span>
+                                <span>{set.exercise_type === "bodyweight" ? "Modified reps" : "Weight"}</span>
                                 <input
                                   type="number"
                                   min={0}
+                                  inputMode="numeric"
                                   value={editingSet.weight}
                                   onChange={(event) =>
                                     setEditingSet((prev) =>
                                       prev ? { ...prev, weight: event.target.value } : prev,
                                     )
                                   }
-                                  placeholder={`Weight (${set.unit})`}
+                                  placeholder={set.exercise_type === "bodyweight" ? "Modified reps" : `Weight (${set.unit})`}
+                                  onFocus={(event) => event.currentTarget.select()}
                                 />
                               </label>
                             </div>
@@ -928,7 +1009,7 @@ const GuidedWorkout = ({
                           onClick={() => handleEditSet(index)}
                           aria-label={`Edit set ${idx + 1} of ${entry.exercise}`}
                         >
-                          Set {idx + 1}: {set.reps} reps @ {displayWeight(set.weight, set.unit, unitPreference)}
+                          Set {idx + 1}: {set.reps} reps{set.exercise_type === "bodyweight" ? ` (${formatSetWeight(set)})` : ` @ ${formatSetWeight(set)}`}
                         </button>
                       );
                     })}

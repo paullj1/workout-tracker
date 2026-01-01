@@ -1161,7 +1161,7 @@ label {
 
 .template-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 110px) auto;
+  grid-template-columns: minmax(0, 1fr) repeat(4, 110px) auto;
   gap: 0.5rem;
   align-items: end;
   border: 1px solid var(--border-color);

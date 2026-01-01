@@ -110,14 +110,20 @@ def workout_trends(
         date_key = payload.start_time.date().isoformat()
         entry = overview_bucket[date_key]
         entry["total_sets"] += len(payload.sets)
-        entry["total_reps"] += sum(set_.reps for set_ in payload.sets)
         for set_ in payload.sets:
-            tonnage = _weight_to_kg(set_.weight, set_.unit) * set_.reps
-            entry["tonnage_kg"] += tonnage
+            modifier = 0
+            if set_.exercise_type == "bodyweight":
+                modifier = int(round(set_.weight or 0))
+            reps = set_.reps + modifier
+            entry["total_reps"] += reps
+            tonnage = 0.0
+            if set_.exercise_type != "bodyweight":
+                tonnage = _weight_to_kg(set_.weight, set_.unit) * set_.reps
+                entry["tonnage_kg"] += tonnage
             exercise_entry = exercise_bucket[(set_.exercise, date_key)]
             exercise_entry["tonnage_kg"] += tonnage
             exercise_entry["total_sets"] += 1
-            exercise_entry["total_reps"] += set_.reps
+            exercise_entry["total_reps"] += reps
         if payload.body_weight is not None:
             entry["body_weights"].append(payload.body_weight)
         if payload.end_time:
