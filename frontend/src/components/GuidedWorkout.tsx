@@ -248,13 +248,30 @@ const GuidedWorkout = ({
     }
   }, []);
 
-  const notifyRestComplete = useCallback(() => {
+  const notifyRestComplete = useCallback(async () => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
     const body = currentExercise?.name
       ? `Rest complete for ${currentExercise.name}.`
       : "Rest complete. Ready for the next set.";
-    new Notification("Rest timer done", { body });
+    const options: NotificationOptions = {
+      body,
+      tag: "rest-timer",
+      renotify: true,
+      data: { url: window.location.href },
+    };
+    if ("serviceWorker" in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration) {
+          await registration.showNotification("Rest timer done", options);
+          return;
+        }
+      } catch {
+        // Fall back to direct notifications when SW is unavailable.
+      }
+    }
+    new Notification("Rest timer done", options);
   }, [currentExercise?.name]);
 
   const workoutHistory = useMemo(() => {
@@ -362,7 +379,7 @@ const GuidedWorkout = ({
     if (isRestExpired && !restAlertedRef.current) {
       restAlertedRef.current = true;
       playRestAlert();
-      notifyRestComplete();
+      void notifyRestComplete();
       return;
     }
     if (!isRestExpired) {

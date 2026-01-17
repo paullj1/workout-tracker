@@ -186,7 +186,7 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
             Notification.requestPermission().catch(() => undefined);
         }
     }, []);
-    const notifyRestComplete = useCallback(() => {
+    const notifyRestComplete = useCallback(async () => {
         if (typeof window === "undefined" || !("Notification" in window))
             return;
         if (Notification.permission !== "granted")
@@ -194,7 +194,24 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
         const body = currentExercise?.name
             ? `Rest complete for ${currentExercise.name}.`
             : "Rest complete. Ready for the next set.";
-        new Notification("Rest timer done", { body });
+        const options = {
+            body,
+            tag: "rest-timer",
+            renotify: true,
+            data: { url: window.location.href },
+        };
+        if ("serviceWorker" in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                if (registration) {
+                    await registration.showNotification("Rest timer done", options);
+                    return;
+                }
+            }
+            catch {
+            }
+        }
+        new Notification("Rest timer done", options);
     }, [currentExercise?.name]);
     const workoutHistory = useMemo(() => {
         const groups = new Map();
@@ -296,7 +313,7 @@ const GuidedWorkout = ({ templates, workouts, onSave, unitPreference, userId, on
         if (isRestExpired && !restAlertedRef.current) {
             restAlertedRef.current = true;
             playRestAlert();
-            notifyRestComplete();
+            void notifyRestComplete();
             return;
         }
         if (!isRestExpired) {
