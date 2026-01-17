@@ -254,7 +254,7 @@ const GuidedWorkout = ({
     const body = currentExercise?.name
       ? `Rest complete for ${currentExercise.name}.`
       : "Rest complete. Ready for the next set.";
-    const options: NotificationOptions = {
+    const options: NotificationOptions & { renotify?: boolean } = {
       body,
       tag: "rest-timer",
       renotify: true,
